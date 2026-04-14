@@ -872,10 +872,10 @@
       for (let i = 0; i < Math.min(raw.length, 20); i++) {
         const row = raw[i];
         const first = String(row[0] || '').trim();
-        if (first === 'Name:') accountName = String(row[3] || '').trim();
-        if (first === 'Account:') accountNum = String(row[3] || '').trim();
-        if (first === 'Company:') company = String(row[3] || '').trim();
-        if (first === 'Time' && String(row[1] || '').trim() === 'Position') { headerRow = i; break; }
+        if (first === 'Name:' || first === 'Nombre:') accountName = String(row[3] || '').trim();
+        if (first === 'Account:' || first === 'Cuenta de trading:') accountNum = String(row[3] || '').trim();
+        if (first === 'Company:' || first === 'Empresa:') company = String(row[3] || '').trim();
+        if ((first === 'Time' || first === 'Fecha/Hora') && (String(row[1] || '').trim() === 'Position' || String(row[1] || '').trim() === 'Posición')) { headerRow = i; break; }
       }
 
       if (headerRow === -1) {
