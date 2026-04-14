@@ -645,6 +645,98 @@
         font-size: 11px;
       }
     }
+
+    /* YEAR VIEW STYLES */
+    #month-title {
+      cursor: pointer;
+      transition: color 0.2s;
+      user-select: none;
+    }
+
+    #month-title:hover {
+      color: var(--accent);
+    }
+
+    .cal-headers.hidden {
+      display: none;
+    }
+
+    .year-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .year-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .year-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      background: rgba(127, 255, 178, 0.04);
+    }
+
+    .year-card.active {
+      border-color: var(--accent);
+      background: rgba(127, 255, 178, 0.05);
+    }
+
+    .year-card.win {
+      border-color: rgba(127, 255, 178, 0.15);
+    }
+
+    .year-card.loss {
+      border-color: rgba(255, 107, 107, 0.15);
+    }
+
+    .yc-month {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      font-family: var(--mono);
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
+    }
+
+    .yc-pnl {
+      font-size: 18px;
+      font-weight: 500;
+      font-family: var(--mono);
+    }
+
+    .yc-pnl.pos {
+      color: var(--green);
+    }
+
+    .yc-pnl.neg {
+      color: var(--red);
+    }
+
+    .yc-meta {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
   </style>
 </head>
 
@@ -731,6 +823,7 @@
     let currentYear, currentMonth;
     let months = [];
     let monthIdx = 0;
+    let currentView = 'monthly'; // 'monthly' or 'yearly'
 
     const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -1009,12 +1102,18 @@
       const ym = months[monthIdx];
       const [year, month] = ym.split('-').map(Number);
       const monthName = MONTH_NAMES[month - 1];
+
+      currentView = 'monthly';
       document.getElementById('month-title').textContent = `${monthName} ${year}`;
+      document.getElementById('month-title').onclick = toggleView;
+      document.querySelector('.cal-headers').classList.remove('hidden');
+
       document.getElementById('prev-btn').disabled = monthIdx === 0;
       document.getElementById('next-btn').disabled = monthIdx === months.length - 1;
 
       const grid = document.getElementById('cal-grid');
       grid.innerHTML = '';
+      grid.className = 'cal-grid'; // Reset class for monthly
 
       const firstDay = new Date(year, month - 1, 1).getDay();
       const daysInMonth = new Date(year, month, 0).getDate();
@@ -1049,6 +1148,59 @@
           cell.innerHTML = `<div class="cell-day">${d}</div>`;
         }
         grid.appendChild(cell);
+      }
+    }
+
+    function renderYearView() {
+      const ym = months[monthIdx];
+      const [year] = ym.split('-').map(Number);
+
+      currentView = 'yearly';
+      document.getElementById('month-title').textContent = `${year}`;
+      document.getElementById('month-title').onclick = toggleView;
+      document.querySelector('.cal-headers').classList.add('hidden');
+
+      const grid = document.getElementById('cal-grid');
+      grid.innerHTML = '';
+      grid.className = 'year-grid';
+
+      // Group by months for the current year
+      for (let m = 1; m <= 12; m++) {
+        const mKey = `${year}-${String(m).padStart(2, '0')}`;
+        const monthDays = Object.values(allData.daily).filter(d => d.date.startsWith(mKey));
+
+        const totalNet = monthDays.reduce((sum, d) => sum + d.net, 0);
+        const totalTrades = monthDays.reduce((sum, d) => sum + d.trades, 0);
+        const hasData = monthDays.length > 0;
+
+        const card = document.createElement('div');
+        card.className = `year-card ${hasData ? (totalNet >= 0 ? 'win' : 'loss') : 'empty'}`;
+        if (mKey === ym) card.classList.add('active');
+
+        card.innerHTML = `
+          <div class="yc-month">${MONTH_NAMES[m - 1]}</div>
+          <div class="yc-pnl ${totalNet >= 0 ? 'pos' : 'neg'}">${hasData ? fmtMoney(totalNet) : '$0.00'}</div>
+          <div class="yc-meta">${totalTrades} trades</div>
+        `;
+
+        if (hasData) {
+          card.onclick = () => {
+            const newIdx = months.indexOf(mKey);
+            if (newIdx !== -1) {
+              monthIdx = newIdx;
+              renderCalendar();
+            }
+          };
+        }
+        grid.appendChild(card);
+      }
+    }
+
+    function toggleView() {
+      if (currentView === 'monthly') {
+        renderYearView();
+      } else {
+        renderCalendar();
       }
     }
 
