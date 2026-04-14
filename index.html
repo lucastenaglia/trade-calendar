@@ -604,26 +604,27 @@ const App = {
   renderMetrics() {
     const m = this.data.metrics;
     const grid = document.getElementById('metrics-grid');
+    
+    // Calculate best day for the metric card (highest daily net)
+    const days = Object.values(this.data.daily);
+    const bestDay = days.length > 0 ? Math.max(...days.map(d => d.net)) : 0;
+
     grid.innerHTML = `
       <div class="metric-card">
-        <div class="m-label">P&L Neto Total</div>
+        <div class="m-label">P&L NETO TOTAL</div>
         <div class="m-value ${m.totalNet >= 0 ? 'green' : 'red'}">${this.fmt(m.totalNet)}</div>
       </div>
       <div class="metric-card">
-        <div class="m-label">Profit Factor</div>
-        <div class="m-value ${m.profitFactor >= 1.5 ? 'green' : 'amber'}">${m.profitFactor.toFixed(2)}</div>
+        <div class="m-label">TRADES TOTALES</div>
+        <div class="m-value">${m.totalTrades}</div>
       </div>
       <div class="metric-card">
-        <div class="m-label">Win Rate</div>
+        <div class="m-label">WIN RATE GLOBAL</div>
         <div class="m-value ${m.winRate >= 50 ? 'green' : 'amber'}">${m.winRate.toFixed(1)}%</div>
       </div>
       <div class="metric-card">
-        <div class="m-label">Max Drawdown</div>
-        <div class="m-value red">-${this.fmt(m.maxDD)}</div>
-      </div>
-      <div class="metric-card">
-        <div class="m-label">Trades</div>
-        <div class="m-value">${m.totalTrades}</div>
+        <div class="m-label">MEJOR DÍA</div>
+        <div class="m-value green">${this.fmt(bestDay)}</div>
       </div>
     `;
   },
@@ -657,8 +658,8 @@ const App = {
             cell.innerHTML = `
                 <div class="cell-day">${d}</div>
                 <div class="cell-pnl ${info.net >= 0 ? 'pos' : 'neg'}">${this.fmt(info.net)}</div>
-                <div class="cell-meta">${info.trades.length} ops</div>
-                <div class="cell-wr ${wr >= 50 ? 'good' : 'bad'}">${wr.toFixed(0)}% WR</div>
+                <div class="cell-meta">${info.trades.length} trades</div>
+                <div class="cell-wr ${wr >= 50 ? 'good' : 'bad'}">${wr.toFixed(1)}% WR</div>
             `;
             cell.addEventListener('mouseenter', e => this.showTip(e, info));
             cell.addEventListener('mousemove', e => this.moveTip(e));
@@ -714,10 +715,26 @@ const App = {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: { 
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1e2229',
+                    bodyFont: { family: 'DM Mono' },
+                    callbacks: {
+                        label: (item) => this.fmt(item.raw)
+                    }
+                }
+            },
             scales: {
                 x: { grid: { display: false }, ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 10 } } },
-                y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 10 } } }
+                y: { 
+                    grid: { color: 'rgba(255,255,255,0.03)' }, 
+                    ticks: { 
+                        color: '#6b7280', 
+                        font: { family: 'DM Mono', size: 10 },
+                        callback: (v) => this.fmt(v).split('.')[0]
+                    } 
+                }
             }
         }
     });
@@ -734,39 +751,15 @@ const App = {
         row.innerHTML = `
             <div class="bar-date">${d.date.slice(5).replace('-','/')}</div>
             <div class="bar-track"><div class="bar-fill ${d.net>=0?'pos':'neg'}" style="width:${pct}%">${this.fmt(d.net)}</div></div>
-            <div class="bar-trades">${d.trades.length} ops</div>
+            <div class="bar-trades">${d.trades.length} trades</div>
         `;
         barContainer.appendChild(row);
     });
   },
 
   renderHighlights() {
-    const m = this.data.metrics;
-    const grid = document.getElementById('highlights-grid');
-    document.getElementById('highlights-section').style.display = 'block';
-
-    grid.innerHTML = `
-      <div class="highlight-card win">
-        <div class="hc-label">Mejor Operación</div>
-        <div class="hc-value green">${this.fmt(m.bestTrade)}</div>
-        <div class="hc-meta">Retorno individual max.</div>
-      </div>
-      <div class="highlight-card loss">
-        <div class="hc-label">Peor Operación</div>
-        <div class="hc-value red">${this.fmt(m.worstTrade)}</div>
-        <div class="hc-meta">Pérdida individual max.</div>
-      </div>
-      <div class="highlight-card">
-        <div class="hc-label">Profit Bruto</div>
-        <div class="hc-value green">${this.fmt(m.grossProfit)}</div>
-        <div class="hc-meta">Suma de ganadoras</div>
-      </div>
-      <div class="highlight-card">
-        <div class="hc-label">Loss Bruta</div>
-        <div class="hc-value red">-${this.fmt(m.grossLoss)}</div>
-        <div class="hc-meta">Suma de perdedoras</div>
-      </div>
-    `;
+    // Hidden to match reference Image 1
+    document.getElementById('highlights-section').style.display = 'none';
   },
 
   changeMonth(dir) {
@@ -776,7 +769,7 @@ const App = {
 
   fmt(v) {
     const abs = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return (v >= 0 ? '$' : '-$') + abs;
+    return (v >= 0 ? '+$' : '-$') + abs;
   },
 
   showTip(e, info) {
