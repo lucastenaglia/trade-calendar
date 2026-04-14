@@ -314,12 +314,20 @@
     }
 
     /* CALENDAR */
+    .cal-and-weeks {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin-bottom: 36px;
+    }
+
     .cal-wrap {
+      flex: 1;
+      min-width: 0;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 18px;
       padding: 28px;
-      margin-bottom: 36px;
     }
 
     .cal-main {
@@ -839,8 +847,8 @@
       <div class="account-bar" id="account-bar"></div>
       <div class="metrics-grid" id="metrics-grid"></div>
 
-      <div class="cal-wrap">
-        <div class="cal-main">
+      <div class="cal-and-weeks">
+        <div class="cal-wrap">
           <div class="month-nav">
             <h3 id="month-title"></h3>
             <button class="nav-btn" id="prev-btn" onclick="changeMonth(-1)">&#8592;</button>
@@ -855,11 +863,9 @@
             <div class="cal-hdr">VIE</div>
             <div class="cal-hdr">SÁB</div>
           </div>
-          <div class="cal-body">
-            <div class="cal-grid" id="cal-grid"></div>
-            <div class="week-sidebar" id="week-sidebar"></div>
-          </div>
+          <div class="cal-grid" id="cal-grid"></div>
         </div>
+        <div class="week-sidebar" id="week-sidebar"></div>
       </div>
 
       <div class="chart-section">
