@@ -971,39 +971,73 @@
     }
 
     function parseAndRender(raw) {
-      // Find account info
       let accountName = '', accountNum = '', company = '';
       let headerRow = -1;
+      let format = 'mt4'; // 'mt4' or 'exness'
 
       for (let i = 0; i < Math.min(raw.length, 20); i++) {
         const row = raw[i];
-        const first = String(row[0] || '').trim();
-        if (first === 'Name:' || first === 'Nombre:') accountName = String(row[3] || '').trim();
-        if (first === 'Account:' || first === 'Cuenta de trading:') accountNum = String(row[3] || '').trim();
-        if (first === 'Company:' || first === 'Empresa:') company = String(row[3] || '').trim();
-        if ((first === 'Time' || first === 'Fecha/Hora') && (String(row[1] || '').trim() === 'Position' || String(row[1] || '').trim() === 'Posición')) { headerRow = i; break; }
+        if (!row) continue;
+        const f0 = String(row[0] || '').trim();
+        const f2 = String(row[2] || '').trim();
+
+        if (f0 === 'Name:' || f0 === 'Nombre:') accountName = String(row[3] || '').trim();
+        if (f0 === 'Account:' || f0 === 'Cuenta de trading:') accountNum = String(row[3] || '').trim();
+        if (f0 === 'Company:' || f0 === 'Empresa:') company = String(row[3] || '').trim();
+
+        // Standard MT4/MT5: row[0]="Time", row[1]="Position"
+        if ((f0 === 'Time' || f0 === 'Fecha/Hora') && (String(row[1] || '').trim() === 'Position' || String(row[1] || '').trim() === 'Posición')) {
+          headerRow = i; format = 'mt4'; break;
+        }
+        // Exness: row[0]="Symbol", row[2]="Time", row[3]="Type"
+        if (f0 === 'Symbol' && f2 === 'Time') {
+          headerRow = i; format = 'exness'; break;
+        }
+        // Exness variant: row[0]="Symbol", row[1]="Position"
+        if (f0 === 'Symbol' && String(row[3] || '').trim() === 'Type') {
+          headerRow = i; format = 'exness'; break;
+        }
       }
 
       if (headerRow === -1) {
-        showError('Formato no reconocido. Exportá el reporte desde MT4/MT5: Account History → All History → clic derecho → Save as Report.');
+        showError('Formato no reconocido. Exportá el reporte desde MT4/MT5 o Exness: Account History → Save as Report (.xlsx)');
         return;
       }
 
       const trades = [];
       for (let i = headerRow + 1; i < raw.length; i++) {
         const row = raw[i];
-        if (!row[0]) continue;
-        const type = String(row[3] || '').trim().toLowerCase();
-        if (type !== 'buy' && type !== 'sell') continue;
-        const vol = parseFloat(row[4]);
-        const profit = parseFloat(row[12]);
+        if (!row) continue;
+
+        let type, dateStr, profit, vol, commission = 0, swap = 0;
+
+        if (format === 'exness') {
+          // Exness: Symbol | Position | Time | Type | Volume | Price | S/L | T/P | Market Price | Swap | Profit
+          if (!row[0] || !row[2]) continue;
+          type = String(row[3] || '').trim().toLowerCase();
+          if (type !== 'buy' && type !== 'sell') continue;
+          vol = parseFloat(row[4]);
+          profit = parseFloat(row[10]);
+          swap = parseFloat(row[9]) || 0;
+          dateStr = String(row[2]).trim();
+        } else {
+          // Standard MT4/MT5: Time | Position | Symbol | Type | Volume | ... | Commission | Swap | Profit
+          if (!row[0]) continue;
+          type = String(row[3] || '').trim().toLowerCase();
+          if (type !== 'buy' && type !== 'sell') continue;
+          vol = parseFloat(row[4]);
+          profit = parseFloat(row[12]);
+          commission = parseFloat(row[10]) || 0;
+          swap = parseFloat(row[11]) || 0;
+          dateStr = String(row[0]).trim();
+        }
+
         if (isNaN(vol) || isNaN(profit)) continue;
-        const openStr = String(row[0]).trim();
-        const dateParts = openStr.match(/^(\d{4})\.(\d{2})\.(\d{2})/);
+
+        const dateParts = dateStr.match(/^(\d{4})\.(\d{2})\.(\d{2})/);
         if (!dateParts) continue;
         const dateKey = `${dateParts[1]}-${dateParts[2]}-${dateParts[3]}`;
-        const commission = parseFloat(row[10]) || 0;
-        const swap = parseFloat(row[11]) || 0;
+
         trades.push({ date: dateKey, profit, commission, swap, net: profit + commission + swap, type, vol });
       }
 
