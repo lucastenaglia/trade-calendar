@@ -1,0 +1,12 @@
+# Data files
+*.xlsx
+*.xls
+*.csv
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trade Calendar</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0f12;
+    --surface: #161920;
+    --surface2: #1e2229;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #e8eaf0;
+    --muted: #6b7280;
+    --accent: #7fffb2;
+    --accent-dim: rgba(127,255,178,0.1);
+    --red: #ff6b6b;
+    --red-dim: rgba(255,107,107,0.1);
+    --green: #7fffb2;
+    --green-dim: rgba(127,255,178,0.08);
+    --amber: #ffd166;
+    --font: 'DM Sans', sans-serif;
+    --mono: 'DM Mono', monospace;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+
+  body { display: flex; flex-direction: column; min-height: 100vh; }
+
+  header {
+    padding: 28px 40px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .logo-mark {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .logo-mark svg { width: 18px; height: 18px; }
+  header h1 { font-size: 20px; font-weight: 500; letter-spacing: -0.3px; }
+  header span { font-size: 14px; color: var(--muted); margin-left: auto; font-family: var(--mono); }
+
+  main { flex: 1; padding: 48px 56px; max-width: 1400px; margin: 0 auto; width: 100%; }
+
+  /* DROP ZONE */
+  #drop-zone {
+    border: 1.5px dashed var(--border2);
+    border-radius: 16px;
+    padding: 64px 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface);
+    position: relative;
+  }
+  #drop-zone:hover, #drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(127,255,178,0.04);
+  }
+  #drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 20px;
+  }
+  .drop-icon svg { width: 22px; height: 22px; color: var(--accent); }
+  #drop-zone h2 { font-size: 18px; font-weight: 500; margin-bottom: 8px; }
+  #drop-zone p { font-size: 14px; color: var(--muted); }
+  .drop-hint {
+    display: inline-block;
+    margin-top: 20px;
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--muted);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 6px 14px;
+    border-radius: 6px;
+  }
+
+  /* ERROR */
+  #error-box {
+    display: none;
+    background: var(--red-dim);
+    border: 1px solid rgba(255,107,107,0.3);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-top: 16px;
+    font-size: 14px;
+    color: var(--red);
+  }
+
+  /* RESULTS */
+  #results { display: none; margin-top: 0; }
+
+  .account-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+  }
+  .account-bar .acc-name { font-size: 16px; font-weight: 500; }
+  .account-bar .acc-detail { font-size: 13px; color: var(--muted); font-family: var(--mono); }
+  .account-bar .reset-btn {
+    margin-left: auto;
+    background: none;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    font-size: 12px;
+    font-family: var(--font);
+    padding: 6px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .account-bar .reset-btn:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
+
+  /* METRICS */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+    margin-bottom: 36px;
+  }
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 24px;
+  }
+  .metric-card .m-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px; font-family: var(--mono); }
+  .metric-card .m-value { font-size: 28px; font-weight: 500; letter-spacing: -0.5px; font-family: var(--mono); }
+  .metric-card .m-value.green { color: var(--green); }
+  .metric-card .m-value.red { color: var(--red); }
+  .metric-card .m-value.amber { color: var(--amber); }
+
+  /* ADDITIONAL METRICS */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+
+  /* MONTH NAV */
+  .month-nav {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .month-nav h3 { font-size: 19px; font-weight: 500; flex: 1; }
+  .nav-btn {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+    font-size: 16px;
+  }
+  .nav-btn:hover { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+  .nav-btn:disabled { opacity: 0.3; cursor: default; }
+  .nav-btn:disabled:hover { background: var(--surface); border-color: var(--border2); color: var(--text); }
+
+  /* CALENDAR */
+  .cal-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 28px;
+    margin-bottom: 36px;
+  }
+  .cal-headers {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .cal-hdr { font-size: 12px; color: var(--muted); text-align: center; padding: 8px 0; font-family: var(--mono); letter-spacing: 0.5px; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+
+  .cal-cell {
+    border-radius: 12px;
+    min-height: 110px;
+    padding: 14px 14px 10px;
+    border: 1px solid transparent;
+    position: relative;
+    cursor: default;
+    transition: border-color 0.15s;
+  }
+  .cal-cell.empty { background: transparent; }
+  .cal-cell.no-trade {
+    background: var(--surface2);
+    border-color: var(--border);
+  }
+  .cal-cell.win {
+    background: rgba(127,255,178,0.05);
+    border-color: rgba(127,255,178,0.15);
+    cursor: pointer;
+  }
+  .cal-cell.win:hover { border-color: rgba(127,255,178,0.4); background: rgba(127,255,178,0.09); }
+  .cal-cell.loss {
+    background: rgba(255,107,107,0.05);
+    border-color: rgba(255,107,107,0.15);
+    cursor: pointer;
+  }
+  .cal-cell.loss:hover { border-color: rgba(255,107,107,0.4); background: rgba(255,107,107,0.09); }
+  .cal-cell.today { outline: 2px solid rgba(255,209,102,0.5); }
+
+  .cell-day { font-size: 13px; color: var(--muted); font-family: var(--mono); margin-bottom: 8px; }
+  .cell-pnl { font-size: 16px; font-weight: 500; font-family: var(--mono); letter-spacing: -0.3px; }
+  .cell-pnl.pos { color: var(--green); }
+  .cell-pnl.neg { color: var(--red); }
+  .cell-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .cell-wr { font-size: 11px; margin-top: 3px; font-family: var(--mono); }
+  .cell-wr.good { color: rgba(127,255,178,0.7); }
+  .cell-wr.bad { color: rgba(255,107,107,0.7); }
+
+  /* BAR CHART */
+  .chart-section { margin-bottom: 36px; }
+  .section-title { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; font-family: var(--mono); margin-bottom: 16px; }
+  .bar-row { display: flex; align-items: center; gap: 14px; margin-bottom: 9px; }
+  .bar-date { font-size: 12px; color: var(--muted); width: 60px; flex-shrink: 0; font-family: var(--mono); }
+  .bar-track { flex: 1; height: 32px; background: var(--surface2); border-radius: 8px; overflow: hidden; position: relative; }
+  .bar-fill { height: 100%; border-radius: 8px; display: flex; align-items: center; padding: 0 14px; font-size: 13px; font-weight: 500; font-family: var(--mono); min-width: 90px; transition: width 0.6s cubic-bezier(0.16,1,0.3,1); }
+  .bar-fill.pos { background: rgba(127,255,178,0.15); color: var(--green); border: 1px solid rgba(127,255,178,0.2); }
+  .bar-fill.neg { background: rgba(255,107,107,0.12); color: var(--red); border: 1px solid rgba(255,107,107,0.2); }
+  .bar-trades { font-size: 11px; color: var(--muted); width: 64px; text-align: right; flex-shrink: 0; font-family: var(--mono); }
+
+  /* LOSSES / HIGHLIGHTS */
+  .highlights-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 36px;
+  }
+  .highlight-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .highlight-card.loss { border-color: rgba(255,107,107,0.2); }
+  .highlight-card.win { border-color: rgba(127,255,178,0.2); }
+  .hc-label { font-size: 11px; color: var(--muted); text-transform: uppercase; font-family: var(--mono); margin-bottom: 8px; }
+  .hc-value { font-size: 18px; font-weight: 500; font-family: var(--mono); }
+  .hc-value.red { color: var(--red); }
+  .hc-value.green { color: var(--green); }
+  .hc-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* TOOLTIP */
+  .tooltip {
+    position: fixed;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    padding: 16px 20px;
+    font-size: 13px;
+    pointer-events: none;
+    z-index: 1000;
+    min-width: 220px;
+    display: none;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .tt-title { font-size: 14px; font-weight: 500; margin-bottom: 12px; font-family: var(--mono); color: var(--accent); }
+  .tt-row { display: flex; justify-content: space-between; gap: 24px; margin: 6px 0; }
+  .tt-label { color: var(--muted); font-size: 13px; }
+  .tt-val { font-weight: 500; font-family: var(--mono); font-size: 13px; }
+  .tt-val.pos { color: var(--green); }
+  .tt-val.neg { color: var(--red); }
+
+  /* LOADING */
+  #loading {
+    display: none;
+    text-align: center;
+    padding: 40px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 768px) {
+    main { padding: 20px; }
+    .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    .losses-grid { grid-template-columns: repeat(2, 1fr); }
+    header { padding: 20px; }
+    header span { display: none; }
+    .cal-cell { min-height: 60px; padding: 6px; }
+    .cell-pnl { font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">
+    <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3 13L7 8L10 11L14 5" stroke="#0d0f12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <h1>Trade Calendar</h1>
+  <span>MT4 / MT5 — Trade History Report</span>
+</header>
+
+<main>
+
+  <div id="drop-zone">
+    <input type="file" accept=".xlsx,.xls" id="file-input">
+    <div class="drop-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14,2 14,8 20,8"/>
+        <line x1="12" y1="18" x2="12" y2="12"/>
+        <polyline points="9,15 12,12 15,15"/>
+      </svg>
+    </div>
+    <h2>Cargá tu reporte de trades</h2>
+    <p>Arrastrá el archivo Excel exportado desde MT4/MT5 o hacé click para seleccionarlo</p>
+    <span class="drop-hint">Trade History Report (.xlsx)</span>
+  </div>
+
+  <div id="error-box"></div>
+  <div id="loading"><div class="spinner"></div>Procesando trades...</div>
+
+  <div id="results">
+    <div class="account-bar" id="account-bar"></div>
+    <div class="metrics-grid" id="metrics-grid"></div>
+
+    <div class="cal-wrap">
+      <div class="month-nav">
+        <h3 id="month-title"></h3>
+        <button class="nav-btn" id="prev-btn" onclick="changeMonth(-1)">&#8592;</button>
+        <button class="nav-btn" id="next-btn" onclick="changeMonth(1)">&#8594;</button>
+      </div>
+      <div class="cal-headers">
+        <div class="cal-hdr">DOM</div>
+        <div class="cal-hdr">LUN</div>
+        <div class="cal-hdr">MAR</div>
+        <div class="cal-hdr">MIÉ</div>
+        <div class="cal-hdr">JUE</div>
+        <div class="cal-hdr">VIE</div>
+        <div class="cal-hdr">SÁB</div>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+
+    <div class="chart-section">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <div class="section-title" style="margin-bottom:0;">Curva de P&L acumulado</div>
+        <button class="reset-btn" onclick="App.exportChart()" style="margin:0;">Descargar Gráfico</button>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 24px;">
+        <div style="position:relative;width:100%;height:340px;">
+          <canvas id="pnl-line-chart" role="img" aria-label="Gráfico de línea del P&L acumulado por día"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-section">
+      <div class="section-title">P&L neto por día</div>
+      <div id="bar-chart"></div>
+    </div>
+
+    <div class="chart-section" id="highlights-section" style="display:none;">
+      <div class="section-title">Highlights del Periodo</div>
+      <div class="highlights-grid" id="highlights-grid"></div>
+    </div>
+
+  </div>
+
+</main>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+/**
+ * Trade Calendar - Modular Refactor
+ */
+
+const App = {
+  data: {
+    allTrades: [],
+    daily: {},
+    months: [],
+    monthIdx: 0,
+    metrics: {},
+    account: {}
+  },
+
+  config: {
+    MONTH_NAMES: ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'],
+    charts: { pnlLine: null }
+  },
+
+  init() {
+    this.bindEvents();
+  },
+
+  bindEvents() {
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const f = e.dataTransfer.files[0];
+      if (f) this.processFile(f);
+    });
+
+    fileInput.addEventListener('change', e => {
+      if (e.target.files[0]) this.processFile(e.target.files[0]);
+    });
+  },
+
+  showError(msg) {
+    const errBox = document.getElementById('error-box');
+    errBox.textContent = msg;
+    errBox.style.display = 'block';
+    document.getElementById('loading').style.display = 'none';
+  },
+
+  processFile(file) {
+    document.getElementById('error-box').style.display = 'none';
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('results').style.display = 'none';
+
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+        this.parseData(raw);
+      } catch(err) {
+        console.error(err);
+        this.showError('No se pudo leer el archivo. Asegurate de exportar el reporte desde MT4/MT5 en formato .xlsx');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  },
+
+  parseData(raw) {
+    let headerRow = -1;
+    const account = { name: '', num: '', company: '' };
+
+    // Find Header and Account Info
+    for (let i = 0; i < Math.min(raw.length, 30); i++) {
+      const row = raw[i];
+      const first = String(row[0] || '').trim();
+      if (first === 'Name:') account.name = String(row[3] || '').trim();
+      if (first === 'Account:') account.num = String(row[3] || '').trim();
+      if (first === 'Company:') account.company = String(row[3] || '').trim();
+      if (first === 'Time' && String(row[1] || '').trim() === 'Position') { headerRow = i; break; }
+    }
+
+    if (headerRow === -1) {
+      this.showError('Formato no reconocido. Exportá el reporte desde MT4/MT5: Account History → All History → clic derecho → Save as Report.');
+      return;
+    }
+
+    const trades = [];
+    for (let i = headerRow + 1; i < raw.length; i++) {
+        const row = raw[i];
+        if (!row[0] || !row[3]) continue;
+        const type = String(row[3]).trim().toLowerCase();
+        if (type !== 'buy' && type !== 'sell') continue;
+
+        const profit = parseFloat(row[12]);
+        const commission = parseFloat(row[10]) || 0;
+        const swap = parseFloat(row[11]) || 0;
+        if (isNaN(profit)) continue;
+
+        const dateStr = String(row[0]).trim();
+        const dMatch = dateStr.match(/^(\d{4})\.(\d{2})\.(\d{2})/);
+        if (!dMatch) continue;
+
+        trades.push({
+            date: `${dMatch[1]}-${dMatch[2]}-${dMatch[3]}`,
+            profit, commission, swap,
+            net: profit + commission + swap,
+            type,
+            symbol: String(row[2] || '').trim(),
+            vol: parseFloat(row[4]) || 0
+        });
+    }
+
+    if (trades.length === 0) {
+      this.showError('No se encontraron trades en el archivo.');
+      return;
+    }
+
+    this.data.allTrades = trades;
+    this.data.account = account;
+    this.calculateMetrics();
+    this.render();
+  },
+
+  calculateMetrics() {
+    const trades = this.data.allTrades;
+    const byDate = {};
+
+    let totalNet = 0;
+    let grossProfit = 0;
+    let grossLoss = 0;
+    let maxEquity = 0;
+    let maxDD = 0;
+    let currentEquity = 0;
+
+    trades.forEach(t => {
+      totalNet += t.net;
+      if (t.net > 0) grossProfit += t.net;
+      else grossLoss += Math.abs(t.net);
+
+      // Drawdown calc
+      currentEquity += t.net;
+      if (currentEquity > maxEquity) maxEquity = currentEquity;
+      const dd = maxEquity - currentEquity;
+      if (dd > maxDD) maxDD = dd;
+
+      if (!byDate[t.date]) byDate[t.date] = { date: t.date, trades: [], net: 0, wins: 0, losses: 0, grossWin: 0, grossLoss: 0 };
+      const d = byDate[t.date];
+      d.trades.push(t);
+      d.net += t.net;
+      if (t.net >= 0) { d.wins++; d.grossWin += t.net; }
+      else { d.losses++; d.grossLoss += Math.abs(t.net); }
+    });
+
+    // Monthly grouping for calendar
+    const monthSet = new Set(Object.keys(byDate).map(d => d.slice(0, 7)));
+    this.data.months = Array.from(monthSet).sort();
+    this.data.monthIdx = this.data.months.length - 1;
+    this.data.daily = byDate;
+
+    this.data.metrics = {
+        totalNet,
+        grossProfit,
+        grossLoss,
+        profitFactor: grossLoss === 0 ? grossProfit : (grossProfit / grossLoss),
+        totalTrades: trades.length,
+        winRate: (trades.filter(t => t.net > 0).length / trades.length) * 100,
+        maxDD,
+        bestTrade: Math.max(...trades.map(t => t.net)),
+        worstTrade: Math.min(...trades.map(t => t.net))
+    };
+  },
+
+  render() {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('drop-zone').style.display = 'none';
+    document.getElementById('results').style.display = 'block';
+
+    this.renderAccountBar();
+    this.renderMetrics();
+    this.renderCalendar();
+    this.renderCharts();
+    this.renderHighlights();
+  },
+
+  renderAccountBar() {
+    const { name, num, company } = this.data.account;
+    document.getElementById('account-bar').innerHTML = `
+      <div style="width:36px;height:36px;background:var(--accent-dim);border:1px solid rgba(127,255,178,0.2);border-radius:9px;display:flex;align-items:center;justify-content:center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      </div>
+      <div>
+        <div class="acc-name">${name || 'Cuenta MT'}</div>
+        <div class="acc-detail">${num ? num.split(' ')[0] : ''} ${company ? '· ' + company : ''}</div>
+      </div>
+      <button class="reset-btn" onclick="App.reset()">&#8592; Cargar otro</button>
+    `;
+  },
+
+  renderMetrics() {
+    const m = this.data.metrics;
+    const grid = document.getElementById('metrics-grid');
+    grid.innerHTML = `
+      <div class="metric-card">
+        <div class="m-label">P&L Neto Total</div>
+        <div class="m-value ${m.totalNet >= 0 ? 'green' : 'red'}">${this.fmt(m.totalNet)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="m-label">Profit Factor</div>
+        <div class="m-value ${m.profitFactor >= 1.5 ? 'green' : 'amber'}">${m.profitFactor.toFixed(2)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="m-label">Win Rate</div>
+        <div class="m-value ${m.winRate >= 50 ? 'green' : 'amber'}">${m.winRate.toFixed(1)}%</div>
+      </div>
+      <div class="metric-card">
+        <div class="m-label">Max Drawdown</div>
+        <div class="m-value red">-${this.fmt(m.maxDD)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="m-label">Trades</div>
+        <div class="m-value">${m.totalTrades}</div>
+      </div>
+    `;
+  },
+
+  renderCalendar() {
+    const ym = this.data.months[this.data.monthIdx];
+    if (!ym) return;
+    const [year, month] = ym.split('-').map(Number);
+    document.getElementById('month-title').textContent = `${this.config.MONTH_NAMES[month - 1]} ${year}`;
+
+    const grid = document.getElementById('cal-grid');
+    grid.innerHTML = '';
+
+    const firstDay = new Date(year, month - 1, 1).getDay();
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    for (let i = 0; i < firstDay; i++) {
+        const el = document.createElement('div');
+        el.className = 'cal-cell empty';
+        grid.appendChild(el);
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+        const dateKey = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const info = this.data.daily[dateKey];
+        const cell = document.createElement('div');
+
+        if (info) {
+            const wr = (info.wins / info.trades.length) * 100;
+            cell.className = `cal-cell ${info.net >= 0 ? 'win' : 'loss'}`;
+            cell.innerHTML = `
+                <div class="cell-day">${d}</div>
+                <div class="cell-pnl ${info.net >= 0 ? 'pos' : 'neg'}">${this.fmt(info.net)}</div>
+                <div class="cell-meta">${info.trades.length} ops</div>
+                <div class="cell-wr ${wr >= 50 ? 'good' : 'bad'}">${wr.toFixed(0)}% WR</div>
+            `;
+            cell.addEventListener('mouseenter', e => this.showTip(e, info));
+            cell.addEventListener('mousemove', e => this.moveTip(e));
+            cell.addEventListener('mouseleave', () => this.hideTip());
+        } else {
+            cell.className = 'cal-cell no-trade';
+            cell.innerHTML = `<div class="cell-day">${d}</div>`;
+        }
+        grid.appendChild(cell);
+    }
+
+    document.getElementById('prev-btn').disabled = this.data.monthIdx === 0;
+    document.getElementById('next-btn').disabled = this.data.monthIdx === this.data.months.length - 1;
+  },
+
+  renderCharts() {
+    const days = Object.values(this.data.daily).sort((a,b) => a.date.localeCompare(b.date));
+    const labels = ['Inicio'];
+    const pnlData = [0];
+    let cumulative = 0;
+
+    days.forEach(d => {
+        cumulative += d.net;
+        labels.push(d.date.slice(5).replace('-','/'));
+        pnlData.push(parseFloat(cumulative.toFixed(2)));
+    });
+
+    if (this.config.charts.pnlLine) this.config.charts.pnlLine.destroy();
+
+    const ctx = document.getElementById('pnl-line-chart').getContext('2d');
+    const isPos = cumulative >= 0;
+    const color = isPos ? '#7fffb2' : '#ff6b6b';
+
+    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+    gradient.addColorStop(0, isPos ? 'rgba(127,255,178,0.15)' : 'rgba(255,107,107,0.15)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+    this.config.charts.pnlLine = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            data: pnlData,
+            borderColor: color,
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            fill: true,
+            backgroundColor: gradient,
+            tension: 0.4
+          }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 10 } } },
+                y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 10 } } }
+            }
+        }
+    });
+
+    // Bar Chart
+    const barContainer = document.getElementById('bar-chart');
+    barContainer.innerHTML = '';
+    const maxAbs = Math.max(...days.map(d => Math.abs(d.net)));
+
+    days.slice(-15).forEach(d => {
+        const pct = Math.round((Math.abs(d.net) / maxAbs) * 100);
+        const row = document.createElement('div');
+        row.className = 'bar-row';
+        row.innerHTML = `
+            <div class="bar-date">${d.date.slice(5).replace('-','/')}</div>
+            <div class="bar-track"><div class="bar-fill ${d.net>=0?'pos':'neg'}" style="width:${pct}%">${this.fmt(d.net)}</div></div>
+            <div class="bar-trades">${d.trades.length} ops</div>
+        `;
+        barContainer.appendChild(row);
+    });
+  },
+
+  renderHighlights() {
+    const m = this.data.metrics;
+    const grid = document.getElementById('highlights-grid');
+    document.getElementById('highlights-section').style.display = 'block';
+
+    grid.innerHTML = `
+      <div class="highlight-card win">
+        <div class="hc-label">Mejor Operación</div>
+        <div class="hc-value green">${this.fmt(m.bestTrade)}</div>
+        <div class="hc-meta">Retorno individual max.</div>
+      </div>
+      <div class="highlight-card loss">
+        <div class="hc-label">Peor Operación</div>
+        <div class="hc-value red">${this.fmt(m.worstTrade)}</div>
+        <div class="hc-meta">Pérdida individual max.</div>
+      </div>
+      <div class="highlight-card">
+        <div class="hc-label">Profit Bruto</div>
+        <div class="hc-value green">${this.fmt(m.grossProfit)}</div>
+        <div class="hc-meta">Suma de ganadoras</div>
+      </div>
+      <div class="highlight-card">
+        <div class="hc-label">Loss Bruta</div>
+        <div class="hc-value red">-${this.fmt(m.grossLoss)}</div>
+        <div class="hc-meta">Suma de perdedoras</div>
+      </div>
+    `;
+  },
+
+  changeMonth(dir) {
+    this.data.monthIdx = Math.max(0, Math.min(this.data.months.length - 1, this.data.monthIdx + dir));
+    this.renderCalendar();
+  },
+
+  fmt(v) {
+    const abs = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (v >= 0 ? '$' : '-$') + abs;
+  },
+
+  showTip(e, info) {
+    const tt = document.getElementById('tooltip');
+    tt.innerHTML = `
+      <div class="tt-title">${info.date}</div>
+      <div class="tt-row"><span class="tt-label">Neto</span><span class="tt-val ${info.net>=0?'pos':'neg'}">${this.fmt(info.net)}</span></div>
+      <div class="tt-row"><span class="tt-label">Bruto Ganancia</span><span class="tt-val pos">${this.fmt(info.grossWin)}</span></div>
+      <div class="tt-row"><span class="tt-label">Bruto Pérdida</span><span class="tt-val neg">-${this.fmt(info.grossLoss)}</span></div>
+      <div class="tt-row"><span class="tt-label">Trades</span><span class="tt-val">${info.trades.length}</span></div>
+    `;
+    tt.style.display = 'block';
+    this.moveTip(e);
+  },
+
+  moveTip(e) {
+    const tt = document.getElementById('tooltip');
+    let x = e.clientX + 15, y = e.clientY - 10;
+    if (x + 220 > window.innerWidth) x = e.clientX - 235;
+    tt.style.left = x + 'px';
+    tt.style.top = y + 'px';
+  },
+
+  hideTip() { document.getElementById('tooltip').style.display = 'none'; },
+
+  exportChart() {
+    const canvas = document.getElementById('pnl-line-chart');
+    const link = document.createElement('a');
+    link.download = `pnl-chart-${this.data.account.num || 'report'}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  },
+
+  reset() {
+    location.reload();
+  }
+};
+
+window.changeMonth = (dir) => App.changeMonth(dir);
+
+document.addEventListener('DOMContentLoaded', () => App.init());
+</script>
+</body>
+</html>
