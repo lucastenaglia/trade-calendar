@@ -1171,6 +1171,12 @@
 
         const totalNet = monthDays.reduce((sum, d) => sum + d.net, 0);
         const totalTrades = monthDays.reduce((sum, d) => sum + d.trades, 0);
+        const totalWins = monthDays.reduce((sum, d) => sum + d.wins, 0);
+        const grossProfit = monthDays.reduce((sum, d) => sum + d.grossProfit, 0);
+        const grossLoss = monthDays.reduce((sum, d) => sum + d.grossLoss, 0);
+        const best = monthDays.length > 0 ? Math.max(...monthDays.map(d => d.best)) : 0;
+        const worst = monthDays.length > 0 ? Math.min(...monthDays.map(d => d.worst)) : 0;
+        
         const hasData = monthDays.length > 0;
 
         const card = document.createElement('div');
@@ -1184,6 +1190,17 @@
         `;
 
         if (hasData) {
+          const monthInfo = {
+            date: MONTH_NAMES[m - 1] + ' ' + year,
+            net: totalNet,
+            grossProfit,
+            grossLoss,
+            trades: totalTrades,
+            wr: (totalWins / totalTrades * 100),
+            best,
+            worst
+          };
+
           card.onclick = () => {
             const newIdx = months.indexOf(mKey);
             if (newIdx !== -1) {
@@ -1191,6 +1208,10 @@
               renderCalendar();
             }
           };
+
+          card.addEventListener('mouseenter', ev => showTip(ev, monthInfo));
+          card.addEventListener('mousemove', moveTip);
+          card.addEventListener('mouseleave', hideTip);
         }
         grid.appendChild(card);
       }
