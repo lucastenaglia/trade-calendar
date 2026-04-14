@@ -320,7 +320,56 @@
       border-radius: 18px;
       padding: 28px;
       margin-bottom: 36px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
     }
+
+    .cal-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* WEEK SIDEBAR */
+    .week-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 110px;
+      flex-shrink: 0;
+    }
+
+    .week-ticker {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      cursor: help;
+      transition: border-color 0.15s;
+    }
+
+    .week-ticker:hover {
+      border-color: var(--accent);
+    }
+
+    .wt-label {
+      font-size: 10px;
+      color: var(--muted);
+      font-family: var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .wt-value {
+      font-size: 13px;
+      font-weight: 500;
+      font-family: var(--mono);
+    }
+
+    .wt-value.pos { color: var(--green); }
+    .wt-value.neg { color: var(--red); }
+    .wt-value.muted { color: var(--muted); }
 
     .cal-headers {
       display: grid;
@@ -781,21 +830,24 @@
       <div class="metrics-grid" id="metrics-grid"></div>
 
       <div class="cal-wrap">
-        <div class="month-nav">
-          <h3 id="month-title"></h3>
-          <button class="nav-btn" id="prev-btn" onclick="changeMonth(-1)">&#8592;</button>
-          <button class="nav-btn" id="next-btn" onclick="changeMonth(1)">&#8594;</button>
+        <div class="cal-main">
+          <div class="month-nav">
+            <h3 id="month-title"></h3>
+            <button class="nav-btn" id="prev-btn" onclick="changeMonth(-1)">&#8592;</button>
+            <button class="nav-btn" id="next-btn" onclick="changeMonth(1)">&#8594;</button>
+          </div>
+          <div class="cal-headers">
+            <div class="cal-hdr">DOM</div>
+            <div class="cal-hdr">LUN</div>
+            <div class="cal-hdr">MAR</div>
+            <div class="cal-hdr">MIÉ</div>
+            <div class="cal-hdr">JUE</div>
+            <div class="cal-hdr">VIE</div>
+            <div class="cal-hdr">SÁB</div>
+          </div>
+          <div class="cal-grid" id="cal-grid"></div>
         </div>
-        <div class="cal-headers">
-          <div class="cal-hdr">DOM</div>
-          <div class="cal-hdr">LUN</div>
-          <div class="cal-hdr">MAR</div>
-          <div class="cal-hdr">MIÉ</div>
-          <div class="cal-hdr">JUE</div>
-          <div class="cal-hdr">VIE</div>
-          <div class="cal-hdr">SÁB</div>
-        </div>
-        <div class="cal-grid" id="cal-grid"></div>
+        <div class="week-sidebar" id="week-sidebar"></div>
       </div>
 
       <div class="chart-section">
@@ -1176,6 +1228,74 @@
         }
         grid.appendChild(cell);
       }
+
+      renderWeeklySidebar(year, month);
+    }
+
+    function calcWeeklyPnl(year, month) {
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const weeks = [];
+      let weekNum = 0;
+      let weekStart = 1;
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dow = new Date(year, month - 1, d).getDay(); // 0=Sun
+        if (d === 1) weekNum = 0;
+        // Start a new week on Monday (1) except if d==1
+        if (d > 1 && dow === 1) {
+          weekNum++;
+          weekStart = d;
+        }
+        if (!weeks[weekNum]) weeks[weekNum] = { net: 0, trades: 0, wins: 0, days: [] };
+
+        const dateKey = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const info = allData.daily[dateKey];
+        if (info) {
+          weeks[weekNum].net += info.net;
+          weeks[weekNum].trades += info.trades;
+          weeks[weekNum].wins += info.wins;
+          weeks[weekNum].days.push(info);
+        }
+      }
+      return weeks;
+    }
+
+    function renderWeeklySidebar(year, month) {
+      const sidebar = document.getElementById('week-sidebar');
+      sidebar.innerHTML = '';
+      sidebar.style.display = 'flex';
+
+      const weeks = calcWeeklyPnl(year, month);
+
+      weeks.forEach((wk, i) => {
+        const hasData = wk.trades > 0;
+        const wr = hasData ? (wk.wins / wk.trades * 100) : 0;
+
+        const ticker = document.createElement('div');
+        ticker.className = 'week-ticker';
+        ticker.innerHTML = `
+          <div class="wt-label">Week ${i + 1}</div>
+          <div class="wt-value ${!hasData ? 'muted' : wk.net >= 0 ? 'pos' : 'neg'}">${
+            hasData ? fmtMoney(wk.net) : '—'
+          }</div>
+        `;
+
+        if (hasData) {
+          ticker.addEventListener('mouseenter', e => {
+            tooltip.innerHTML = `
+              <div class="tt-title">Week ${i + 1}</div>
+              <div class="tt-row"><span class="tt-label">P&L neto</span><span class="tt-val ${wk.net >= 0 ? 'pos' : 'neg'}">${fmtMoney(wk.net)}</span></div>
+              <div class="tt-row"><span class="tt-label">Trades</span><span class="tt-val">${wk.trades}</span></div>
+              <div class="tt-row"><span class="tt-label">Win rate</span><span class="tt-val ${wr >= 50 ? 'pos' : 'neg'}">${wr.toFixed(1)}%</span></div>
+            `;
+            tooltip.style.display = 'block';
+            moveTip(e);
+          });
+          ticker.addEventListener('mousemove', moveTip);
+          ticker.addEventListener('mouseleave', hideTip);
+        }
+        sidebar.appendChild(ticker);
+      });
     }
 
     function renderYearView() {
