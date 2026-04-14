@@ -934,7 +934,16 @@
         };
       });
 
-      allData = { daily, accountName, accountNum, company, totalTrades: trades.length };
+      const buys = trades.filter(t => t.type === 'buy');
+      const sells = trades.filter(t => t.type === 'sell');
+      const ratios = {
+        buys: buys.length,
+        sells: sells.length,
+        wrBuy: buys.length > 0 ? (buys.filter(t => t.net > 0).length / buys.length * 100) : 0,
+        wrSell: sells.length > 0 ? (sells.filter(t => t.net > 0).length / sells.length * 100) : 0
+      };
+
+      allData = { daily, accountName, accountNum, company, totalTrades: trades.length, ratios };
 
       // Build months list
       const dateKeys = Object.keys(daily).sort();
@@ -1077,6 +1086,8 @@
       const bestDay = Math.max(...days.map(x => x.net));
       const wr = (totalWins / totalTrades * 100);
 
+      const r = allData.ratios;
+
       document.getElementById('metrics-grid').innerHTML = `
     <div class="metric-card">
       <div class="m-label">P&L neto total</div>
@@ -1090,12 +1101,28 @@
       <div class="m-label">Win rate global</div>
       <div class="m-value ${wr >= 50 ? 'green' : 'amber'}">${wr.toFixed(1)}%</div>
     </div>
-
     <div class="metric-card">
       <div class="m-label">Mejor día</div>
       <div class="m-value green">${fmtMoney(bestDay)}</div>
     </div>
+    <div class="metric-card" id="ratio-card" style="cursor:help;">
+      <div class="m-label">Longs / Shorts</div>
+      <div class="m-value">${r.buys} / ${r.sells}</div>
+    </div>
   `;
+
+      const ratioCard = document.getElementById('ratio-card');
+      ratioCard.addEventListener('mouseenter', e => {
+        tooltip.innerHTML = `
+          <div class="tt-title">Rendimiento por tipo</div>
+          <div class="tt-row"><span class="tt-label">Longs (Buy) WR</span><span class="tt-val ${r.wrBuy >= 50 ? 'pos' : 'neg'}">${r.wrBuy.toFixed(1)}%</span></div>
+          <div class="tt-row"><span class="tt-label">Shorts (Sell) WR</span><span class="tt-val ${r.wrSell >= 50 ? 'pos' : 'neg'}">${r.wrSell.toFixed(1)}%</span></div>
+        `;
+        tooltip.style.display = 'block';
+        moveTip(e);
+      });
+      ratioCard.addEventListener('mousemove', moveTip);
+      ratioCard.addEventListener('mouseleave', hideTip);
     }
 
     function renderCalendar() {
