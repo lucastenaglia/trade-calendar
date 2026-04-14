@@ -320,9 +320,6 @@
       border-radius: 18px;
       padding: 28px;
       margin-bottom: 36px;
-      display: flex;
-      gap: 16px;
-      align-items: flex-start;
     }
 
     .cal-main {
@@ -331,21 +328,31 @@
     }
 
     /* WEEK SIDEBAR */
+    .cal-body {
+      display: flex;
+      gap: 6px;
+      align-items: flex-start;
+    }
+
     .week-sidebar {
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      min-width: 110px;
+      gap: 6px;
       flex-shrink: 0;
+      width: 115px;
     }
 
     .week-ticker {
       background: var(--surface2);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 12px 14px;
+      padding: 14px 14px 10px;
+      min-height: 110px;
       cursor: help;
       transition: border-color 0.15s;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
     }
 
     .week-ticker:hover {
@@ -358,13 +365,14 @@
       font-family: var(--mono);
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
     }
 
     .wt-value {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 500;
       font-family: var(--mono);
+      letter-spacing: -0.3px;
     }
 
     .wt-value.pos { color: var(--green); }
@@ -391,6 +399,8 @@
       display: grid;
       grid-template-columns: repeat(7, 1fr);
       gap: 6px;
+      flex: 1;
+      min-width: 0;
     }
 
     .cal-cell {
@@ -845,9 +855,11 @@
             <div class="cal-hdr">VIE</div>
             <div class="cal-hdr">SÁB</div>
           </div>
-          <div class="cal-grid" id="cal-grid"></div>
+          <div class="cal-body">
+            <div class="cal-grid" id="cal-grid"></div>
+            <div class="week-sidebar" id="week-sidebar"></div>
+          </div>
         </div>
-        <div class="week-sidebar" id="week-sidebar"></div>
       </div>
 
       <div class="chart-section">
@@ -1186,6 +1198,7 @@
       document.getElementById('month-title').textContent = `${monthName} ${year}`;
       document.getElementById('month-title').onclick = toggleView;
       document.querySelector('.cal-headers').classList.remove('hidden');
+      document.getElementById('week-sidebar').style.display = 'flex';
 
       document.getElementById('prev-btn').disabled = monthIdx === 0;
       document.getElementById('next-btn').disabled = monthIdx === months.length - 1;
@@ -1306,6 +1319,7 @@
       document.getElementById('month-title').textContent = `${year}`;
       document.getElementById('month-title').onclick = toggleView;
       document.querySelector('.cal-headers').classList.add('hidden');
+      document.getElementById('week-sidebar').style.display = 'none';
 
       const grid = document.getElementById('cal-grid');
       grid.innerHTML = '';
