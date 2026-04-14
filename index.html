@@ -805,6 +805,35 @@
         transform: translateY(0);
       }
     }
+    /* CENT ACCOUNT TOGGLE */
+    .cent-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      font-family: var(--mono);
+      cursor: pointer;
+      padding: 7px 14px;
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      background: none;
+      transition: all 0.15s;
+      user-select: none;
+    }
+
+    .cent-toggle:hover { border-color: var(--accent); color: var(--text); }
+    .cent-toggle.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+    .cent-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--accent);
+      color: #0d0f12;
+      font-weight: 600;
+      font-family: var(--mono);
+    }
   </style>
 </head>
 
@@ -837,6 +866,11 @@
       <h2>Cargá tu reporte de trades</h2>
       <p>Arrastrá el archivo Excel exportado desde MT4/MT5 o hacé click para seleccionarlo</p>
       <span class="drop-hint">Trade History Report (.xlsx)</span>
+      <div style="margin-top:20px;">
+        <button class="cent-toggle" id="cent-toggle-btn" onclick="toggleCent()">
+          <span>¢ Cuenta Cent</span>
+        </button>
+      </div>
     </div>
 
     <div id="error-box"></div>
@@ -894,7 +928,8 @@
     let currentYear, currentMonth;
     let months = [];
     let monthIdx = 0;
-    let currentView = 'monthly'; // 'monthly' or 'yearly'
+    let currentView = 'monthly';
+    let isCentAccount = false;
 
     const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -1123,7 +1158,10 @@
               ticks: {
                 color: '#6b7280',
                 font: { family: 'DM Mono', size: 10 },
-                callback: v => (v >= 0 ? '+$' : '-$') + Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 0 })
+                callback: v => {
+                  const val = isCentAccount ? v / 100 : v;
+                  return (val >= 0 ? '+$' : '-$') + Math.abs(val).toLocaleString('en-US', { maximumFractionDigits: 0 });
+                }
               },
               border: { color: 'rgba(255,255,255,0.07)' }
             }
@@ -1139,9 +1177,10 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
     </div>
     <div>
-      <div class="acc-name">${accountName || 'Cuenta MT'}</div>
-      <div class="acc-detail">${accountNum ? accountNum.split(' ')[0] : ''} ${company ? '· ' + company : ''}</div>
+      <div class="acc-name">${accountName || 'Cuenta MT'}${isCentAccount ? ' <span class="cent-badge">CENT</span>' : ''}</div>
+      <div class="acc-detail">${accountNum ? accountNum.split(' ')[0] : ''} ${company ? '&middot; ' + company : ''}</div>
     </div>
+    <button class="cent-toggle ${isCentAccount ? 'active' : ''}" onclick="toggleCent()" style="margin-left:12px;">¢ Cuenta Cent</button>
     <button class="reset-btn" onclick="resetApp()">&#8592; Cargar otro archivo</button>
   `;
     }
@@ -1444,8 +1483,20 @@
     function hideTip() { tooltip.style.display = 'none'; }
 
     function fmtMoney(v) {
-      const abs = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      return (v >= 0 ? '+$' : '-$') + abs;
+      const val = isCentAccount ? v / 100 : v;
+      const abs = Math.abs(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return (val >= 0 ? '+$' : '-$') + abs;
+    }
+
+    function toggleCent() {
+      isCentAccount = !isCentAccount;
+      // Update drop-zone button
+      const dzBtn = document.getElementById('cent-toggle-btn');
+      if (dzBtn) dzBtn.classList.toggle('active', isCentAccount);
+      // Re-render if data is loaded
+      if (Object.keys(allData).length > 0) {
+        renderAll();
+      }
     }
 
     function resetApp() {
