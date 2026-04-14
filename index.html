@@ -1,816 +1,1121 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Trade Calendar</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trade Calendar</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-  :root {
-    --bg: #0d0f12;
-    --surface: #161920;
-    --surface2: #1e2229;
-    --border: rgba(255,255,255,0.07);
-    --border2: rgba(255,255,255,0.13);
-    --text: #e8eaf0;
-    --muted: #6b7280;
-    --accent: #7fffb2;
-    --accent-dim: rgba(127,255,178,0.1);
-    --red: #ff6b6b;
-    --red-dim: rgba(255,107,107,0.1);
-    --green: #7fffb2;
-    --green-dim: rgba(127,255,178,0.08);
-    --amber: #ffd166;
-    --font: 'DM Sans', sans-serif;
-    --mono: 'DM Mono', monospace;
-  }
+    :root {
+      --bg: #0d0f12;
+      --surface: #161920;
+      --surface2: #1e2229;
+      --border: rgba(255, 255, 255, 0.07);
+      --border2: rgba(255, 255, 255, 0.13);
+      --text: #e8eaf0;
+      --muted: #6b7280;
+      --accent: #7fffb2;
+      --accent-dim: rgba(127, 255, 178, 0.1);
+      --red: #ff6b6b;
+      --red-dim: rgba(255, 107, 107, 0.1);
+      --green: #7fffb2;
+      --green-dim: rgba(127, 255, 178, 0.08);
+      --amber: #ffd166;
+      --font: 'DM Sans', sans-serif;
+      --mono: 'DM Mono', monospace;
+    }
 
-  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+    html,
+    body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+    }
 
-  body { display: flex; flex-direction: column; min-height: 100vh; }
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
 
-  header {
-    padding: 28px 40px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-  .logo-mark {
-    width: 32px; height: 32px;
-    background: var(--accent);
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .logo-mark svg { width: 18px; height: 18px; }
-  header h1 { font-size: 20px; font-weight: 500; letter-spacing: -0.3px; }
-  header span { font-size: 14px; color: var(--muted); margin-left: auto; font-family: var(--mono); }
+    header {
+      padding: 28px 40px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
 
-  main { flex: 1; padding: 48px 56px; max-width: 1400px; margin: 0 auto; width: 100%; }
+    .logo-mark {
+      width: 32px;
+      height: 32px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
 
-  /* DROP ZONE */
-  #drop-zone {
-    border: 1.5px dashed var(--border2);
-    border-radius: 16px;
-    padding: 64px 40px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    background: var(--surface);
-    position: relative;
-  }
-  #drop-zone:hover, #drop-zone.drag-over {
-    border-color: var(--accent);
-    background: rgba(127,255,178,0.04);
-  }
-  #drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
-  .drop-icon {
-    width: 48px; height: 48px;
-    border-radius: 12px;
-    background: var(--surface2);
-    border: 1px solid var(--border2);
-    display: flex; align-items: center; justify-content: center;
-    margin: 0 auto 20px;
-  }
-  .drop-icon svg { width: 22px; height: 22px; color: var(--accent); }
-  #drop-zone h2 { font-size: 18px; font-weight: 500; margin-bottom: 8px; }
-  #drop-zone p { font-size: 14px; color: var(--muted); }
-  .drop-hint {
-    display: inline-block;
-    margin-top: 20px;
-    font-size: 12px;
-    font-family: var(--mono);
-    color: var(--muted);
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    padding: 6px 14px;
-    border-radius: 6px;
-  }
+    .logo-mark svg {
+      width: 18px;
+      height: 18px;
+    }
 
-  /* ERROR */
-  #error-box {
-    display: none;
-    background: var(--red-dim);
-    border: 1px solid rgba(255,107,107,0.3);
-    border-radius: 10px;
-    padding: 14px 18px;
-    margin-top: 16px;
-    font-size: 14px;
-    color: var(--red);
-  }
+    header h1 {
+      font-size: 20px;
+      font-weight: 500;
+      letter-spacing: -0.3px;
+    }
 
-  /* RESULTS */
-  #results { display: none; margin-top: 0; }
+    header span {
+      font-size: 14px;
+      color: var(--muted);
+      margin-left: auto;
+      font-family: var(--mono);
+    }
 
-  .account-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 14px 20px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    margin-bottom: 28px;
-    flex-wrap: wrap;
-  }
-  .account-bar .acc-name { font-size: 16px; font-weight: 500; }
-  .account-bar .acc-detail { font-size: 13px; color: var(--muted); font-family: var(--mono); }
-  .account-bar .reset-btn {
-    margin-left: auto;
-    background: none;
-    border: 1px solid var(--border2);
-    color: var(--muted);
-    font-size: 12px;
-    font-family: var(--font);
-    padding: 6px 14px;
-    border-radius: 7px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .account-bar .reset-btn:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
+    main {
+      flex: 1;
+      padding: 48px 56px;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
 
-  /* METRICS */
-  .metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 14px;
-    margin-bottom: 36px;
-  }
-  .metric-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 22px 24px;
-  }
-  .metric-card .m-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px; font-family: var(--mono); }
-  .metric-card .m-value { font-size: 28px; font-weight: 500; letter-spacing: -0.5px; font-family: var(--mono); }
-  .metric-card .m-value.green { color: var(--green); }
-  .metric-card .m-value.red { color: var(--red); }
-  .metric-card .m-value.amber { color: var(--amber); }
+    /* DROP ZONE */
+    #drop-zone {
+      border: 1.5px dashed var(--border2);
+      border-radius: 16px;
+      padding: 64px 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: var(--surface);
+      position: relative;
+    }
 
-  /* ADDITIONAL METRICS */
-  .stats-row {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 14px;
-    margin-bottom: 28px;
-  }
+    #drop-zone:hover,
+    #drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(127, 255, 178, 0.04);
+    }
 
-  /* MONTH NAV */
-  .month-nav {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin-bottom: 20px;
-  }
-  .month-nav h3 { font-size: 19px; font-weight: 500; flex: 1; }
-  .nav-btn {
-    background: var(--surface);
-    border: 1px solid var(--border2);
-    color: var(--text);
-    width: 38px; height: 38px;
-    border-radius: 10px;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s;
-    font-size: 16px;
-  }
-  .nav-btn:hover { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
-  .nav-btn:disabled { opacity: 0.3; cursor: default; }
-  .nav-btn:disabled:hover { background: var(--surface); border-color: var(--border2); color: var(--text); }
+    #drop-zone input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
 
-  /* CALENDAR */
-  .cal-wrap {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 18px;
-    padding: 28px;
-    margin-bottom: 36px;
-  }
-  .cal-headers {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 6px;
-    margin-bottom: 8px;
-  }
-  .cal-hdr { font-size: 12px; color: var(--muted); text-align: center; padding: 8px 0; font-family: var(--mono); letter-spacing: 0.5px; }
-  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .drop-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+    }
 
-  .cal-cell {
-    border-radius: 12px;
-    min-height: 110px;
-    padding: 14px 14px 10px;
-    border: 1px solid transparent;
-    position: relative;
-    cursor: default;
-    transition: border-color 0.15s;
-  }
-  .cal-cell.empty { background: transparent; }
-  .cal-cell.no-trade {
-    background: var(--surface2);
-    border-color: var(--border);
-  }
-  .cal-cell.win {
-    background: rgba(127,255,178,0.05);
-    border-color: rgba(127,255,178,0.15);
-    cursor: pointer;
-  }
-  .cal-cell.win:hover { border-color: rgba(127,255,178,0.4); background: rgba(127,255,178,0.09); }
-  .cal-cell.loss {
-    background: rgba(255,107,107,0.05);
-    border-color: rgba(255,107,107,0.15);
-    cursor: pointer;
-  }
-  .cal-cell.loss:hover { border-color: rgba(255,107,107,0.4); background: rgba(255,107,107,0.09); }
-  .cal-cell.today { outline: 2px solid rgba(255,209,102,0.5); }
+    .drop-icon svg {
+      width: 22px;
+      height: 22px;
+      color: var(--accent);
+    }
 
-  .cell-day { font-size: 13px; color: var(--muted); font-family: var(--mono); margin-bottom: 8px; }
-  .cell-pnl { font-size: 16px; font-weight: 500; font-family: var(--mono); letter-spacing: -0.3px; }
-  .cell-pnl.pos { color: var(--green); }
-  .cell-pnl.neg { color: var(--red); }
-  .cell-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
-  .cell-wr { font-size: 11px; margin-top: 3px; font-family: var(--mono); }
-  .cell-wr.good { color: rgba(127,255,178,0.7); }
-  .cell-wr.bad { color: rgba(255,107,107,0.7); }
+    #drop-zone h2 {
+      font-size: 18px;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
 
-  /* BAR CHART */
-  .chart-section { margin-bottom: 36px; }
-  .section-title { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; font-family: var(--mono); margin-bottom: 16px; }
-  .bar-row { display: flex; align-items: center; gap: 14px; margin-bottom: 9px; }
-  .bar-date { font-size: 12px; color: var(--muted); width: 60px; flex-shrink: 0; font-family: var(--mono); }
-  .bar-track { flex: 1; height: 32px; background: var(--surface2); border-radius: 8px; overflow: hidden; position: relative; }
-  .bar-fill { height: 100%; border-radius: 8px; display: flex; align-items: center; padding: 0 14px; font-size: 13px; font-weight: 500; font-family: var(--mono); min-width: 90px; transition: width 0.6s cubic-bezier(0.16,1,0.3,1); }
-  .bar-fill.pos { background: rgba(127,255,178,0.15); color: var(--green); border: 1px solid rgba(127,255,178,0.2); }
-  .bar-fill.neg { background: rgba(255,107,107,0.12); color: var(--red); border: 1px solid rgba(255,107,107,0.2); }
-  .bar-trades { font-size: 11px; color: var(--muted); width: 64px; text-align: right; flex-shrink: 0; font-family: var(--mono); }
+    #drop-zone p {
+      font-size: 14px;
+      color: var(--muted);
+    }
 
-  /* LOSSES / HIGHLIGHTS */
-  .highlights-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    margin-bottom: 36px;
-  }
-  .highlight-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
-  }
-  .highlight-card.loss { border-color: rgba(255,107,107,0.2); }
-  .highlight-card.win { border-color: rgba(127,255,178,0.2); }
-  .hc-label { font-size: 11px; color: var(--muted); text-transform: uppercase; font-family: var(--mono); margin-bottom: 8px; }
-  .hc-value { font-size: 18px; font-weight: 500; font-family: var(--mono); }
-  .hc-value.red { color: var(--red); }
-  .hc-value.green { color: var(--green); }
-  .hc-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .drop-hint {
+      display: inline-block;
+      margin-top: 20px;
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--muted);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 6px;
+    }
 
-  /* TOOLTIP */
-  .tooltip {
-    position: fixed;
-    background: var(--surface2);
-    border: 1px solid var(--border2);
-    border-radius: 14px;
-    padding: 16px 20px;
-    font-size: 13px;
-    pointer-events: none;
-    z-index: 1000;
-    min-width: 220px;
-    display: none;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-  }
-  .tt-title { font-size: 14px; font-weight: 500; margin-bottom: 12px; font-family: var(--mono); color: var(--accent); }
-  .tt-row { display: flex; justify-content: space-between; gap: 24px; margin: 6px 0; }
-  .tt-label { color: var(--muted); font-size: 13px; }
-  .tt-val { font-weight: 500; font-family: var(--mono); font-size: 13px; }
-  .tt-val.pos { color: var(--green); }
-  .tt-val.neg { color: var(--red); }
+    /* ERROR */
+    #error-box {
+      display: none;
+      background: var(--red-dim);
+      border: 1px solid rgba(255, 107, 107, 0.3);
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-top: 16px;
+      font-size: 14px;
+      color: var(--red);
+    }
 
-  /* LOADING */
-  #loading {
-    display: none;
-    text-align: center;
-    padding: 40px;
-    color: var(--muted);
-    font-size: 14px;
-  }
-  .spinner {
-    width: 28px; height: 28px;
-    border: 2px solid var(--border2);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-    margin: 0 auto 16px;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
+    /* RESULTS */
+    #results {
+      display: none;
+      margin-top: 0;
+    }
 
-  @media (max-width: 768px) {
-    main { padding: 20px; }
-    .metrics-grid { grid-template-columns: repeat(2, 1fr); }
-    .losses-grid { grid-template-columns: repeat(2, 1fr); }
-    header { padding: 20px; }
-    header span { display: none; }
-    .cal-cell { min-height: 60px; padding: 6px; }
-    .cell-pnl { font-size: 11px; }
-  }
-</style>
+    .account-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+    }
+
+    .account-bar .acc-name {
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .account-bar .acc-detail {
+      font-size: 13px;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    .account-bar .reset-btn {
+      margin-left: auto;
+      background: none;
+      border: 1px solid var(--border2);
+      color: var(--muted);
+      font-size: 12px;
+      font-family: var(--font);
+      padding: 6px 14px;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .account-bar .reset-btn:hover {
+      border-color: var(--border2);
+      color: var(--text);
+      background: var(--surface2);
+    }
+
+    /* METRICS */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+      margin-bottom: 36px;
+    }
+
+    .metric-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px 24px;
+    }
+
+    .metric-card .m-label {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 10px;
+      font-family: var(--mono);
+    }
+
+    .metric-card .m-value {
+      font-size: 28px;
+      font-weight: 500;
+      letter-spacing: -0.5px;
+      font-family: var(--mono);
+    }
+
+    .metric-card .m-value.green {
+      color: var(--green);
+    }
+
+    .metric-card .m-value.red {
+      color: var(--red);
+    }
+
+    .metric-card .m-value.amber {
+      color: var(--amber);
+    }
+
+    /* MONTH NAV */
+    .month-nav {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .month-nav h3 {
+      font-size: 19px;
+      font-weight: 500;
+      flex: 1;
+    }
+
+    .nav-btn {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+      font-size: 16px;
+    }
+
+    .nav-btn:hover {
+      background: var(--surface2);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.3;
+      cursor: default;
+    }
+
+    .nav-btn:disabled:hover {
+      background: var(--surface);
+      border-color: var(--border2);
+      color: var(--text);
+    }
+
+    /* CALENDAR */
+    .cal-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px;
+      margin-bottom: 36px;
+    }
+
+    .cal-headers {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .cal-hdr {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      padding: 8px 0;
+      font-family: var(--mono);
+      letter-spacing: 0.5px;
+    }
+
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+    }
+
+    .cal-cell {
+      border-radius: 12px;
+      min-height: 110px;
+      padding: 14px 14px 10px;
+      border: 1px solid transparent;
+      position: relative;
+      cursor: default;
+      transition: border-color 0.15s;
+    }
+
+    .cal-cell.empty {
+      background: transparent;
+    }
+
+    .cal-cell.no-trade {
+      background: var(--surface2);
+      border-color: var(--border);
+    }
+
+    .cal-cell.win {
+      background: rgba(127, 255, 178, 0.05);
+      border-color: rgba(127, 255, 178, 0.15);
+      cursor: pointer;
+    }
+
+    .cal-cell.win:hover {
+      border-color: rgba(127, 255, 178, 0.4);
+      background: rgba(127, 255, 178, 0.09);
+    }
+
+    .cal-cell.loss {
+      background: rgba(255, 107, 107, 0.05);
+      border-color: rgba(255, 107, 107, 0.15);
+      cursor: pointer;
+    }
+
+    .cal-cell.loss:hover {
+      border-color: rgba(255, 107, 107, 0.4);
+      background: rgba(255, 107, 107, 0.09);
+    }
+
+    .cal-cell.today {
+      outline: 2px solid rgba(255, 209, 102, 0.5);
+    }
+
+    .cell-day {
+      font-size: 13px;
+      color: var(--muted);
+      font-family: var(--mono);
+      margin-bottom: 8px;
+    }
+
+    .cell-pnl {
+      font-size: 16px;
+      font-weight: 500;
+      font-family: var(--mono);
+      letter-spacing: -0.3px;
+    }
+
+    .cell-pnl.pos {
+      color: var(--green);
+    }
+
+    .cell-pnl.neg {
+      color: var(--red);
+    }
+
+    .cell-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .cell-wr {
+      font-size: 11px;
+      margin-top: 3px;
+      font-family: var(--mono);
+    }
+
+    .cell-wr.good {
+      color: rgba(127, 255, 178, 0.7);
+    }
+
+    .cell-wr.bad {
+      color: rgba(255, 107, 107, 0.7);
+    }
+
+    /* BAR CHART */
+    .chart-section {
+      margin-bottom: 36px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      font-family: var(--mono);
+      margin-bottom: 16px;
+    }
+
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 9px;
+    }
+
+    .bar-date {
+      font-size: 12px;
+      color: var(--muted);
+      width: 60px;
+      flex-shrink: 0;
+      font-family: var(--mono);
+    }
+
+    .bar-track {
+      flex: 1;
+      height: 32px;
+      background: var(--surface2);
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: var(--mono);
+      min-width: 90px;
+      transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .bar-fill.pos {
+      background: rgba(127, 255, 178, 0.15);
+      color: var(--green);
+      border: 1px solid rgba(127, 255, 178, 0.2);
+    }
+
+    .bar-fill.neg {
+      background: rgba(255, 107, 107, 0.12);
+      color: var(--red);
+      border: 1px solid rgba(255, 107, 107, 0.2);
+    }
+
+    .bar-trades {
+      font-size: 11px;
+      color: var(--muted);
+      width: 64px;
+      text-align: right;
+      flex-shrink: 0;
+      font-family: var(--mono);
+    }
+
+    /* LOSSES TABLE */
+    .losses-section {
+      margin-bottom: 28px;
+    }
+
+    .losses-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+
+    .loss-card {
+      background: var(--surface);
+      border: 1px solid rgba(255, 107, 107, 0.15);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+
+    .loss-card .lc-date {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--mono);
+      margin-bottom: 8px;
+    }
+
+    .loss-card .lc-total {
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--red);
+      font-family: var(--mono);
+      margin-bottom: 4px;
+    }
+
+    .loss-card .lc-meta {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* TOOLTIP */
+    .tooltip {
+      position: fixed;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 14px;
+      padding: 16px 20px;
+      font-size: 13px;
+      pointer-events: none;
+      z-index: 1000;
+      min-width: 220px;
+      display: none;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    .tt-title {
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 12px;
+      font-family: var(--mono);
+      color: var(--accent);
+    }
+
+    .tt-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      margin: 6px 0;
+    }
+
+    .tt-label {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .tt-val {
+      font-weight: 500;
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+
+    .tt-val.pos {
+      color: var(--green);
+    }
+
+    .tt-val.neg {
+      color: var(--red);
+    }
+
+    /* LOADING */
+    #loading {
+      display: none;
+      text-align: center;
+      padding: 40px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border: 2px solid var(--border2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (max-width: 768px) {
+      main {
+        padding: 20px;
+      }
+
+      .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .losses-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      header {
+        padding: 20px;
+      }
+
+      header span {
+        display: none;
+      }
+
+      .cal-cell {
+        min-height: 60px;
+        padding: 6px;
+      }
+
+      .cell-pnl {
+        font-size: 11px;
+      }
+    }
+  </style>
 </head>
+
 <body>
 
-<header>
-  <div class="logo-mark">
-    <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M3 13L7 8L10 11L14 5" stroke="#0d0f12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-  </div>
-  <h1>Trade Calendar</h1>
-  <span>MT4 / MT5 — Trade History Report</span>
-</header>
-
-<main>
-
-  <div id="drop-zone">
-    <input type="file" accept=".xlsx,.xls" id="file-input">
-    <div class="drop-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14,2 14,8 20,8"/>
-        <line x1="12" y1="18" x2="12" y2="12"/>
-        <polyline points="9,15 12,12 15,15"/>
+  <header>
+    <div class="logo-mark">
+      <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 13L7 8L10 11L14 5" stroke="#0d0f12" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round" />
       </svg>
     </div>
-    <h2>Cargá tu reporte de trades</h2>
-    <p>Arrastrá el archivo Excel exportado desde MT4/MT5 o hacé click para seleccionarlo</p>
-    <span class="drop-hint">Trade History Report (.xlsx)</span>
-  </div>
+    <h1>Trade Calendar</h1>
+    <span>MT4 / MT5 — Trade History Report</span>
+  </header>
 
-  <div id="error-box"></div>
-  <div id="loading"><div class="spinner"></div>Procesando trades...</div>
+  <main>
 
-  <div id="results">
-    <div class="account-bar" id="account-bar"></div>
-    <div class="metrics-grid" id="metrics-grid"></div>
-
-    <div class="cal-wrap">
-      <div class="month-nav">
-        <h3 id="month-title"></h3>
-        <button class="nav-btn" id="prev-btn" onclick="changeMonth(-1)">&#8592;</button>
-        <button class="nav-btn" id="next-btn" onclick="changeMonth(1)">&#8594;</button>
+    <div id="drop-zone">
+      <input type="file" accept=".xlsx,.xls" id="file-input">
+      <div class="drop-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14,2 14,8 20,8" />
+          <line x1="12" y1="18" x2="12" y2="12" />
+          <polyline points="9,15 12,12 15,15" />
+        </svg>
       </div>
-      <div class="cal-headers">
-        <div class="cal-hdr">DOM</div>
-        <div class="cal-hdr">LUN</div>
-        <div class="cal-hdr">MAR</div>
-        <div class="cal-hdr">MIÉ</div>
-        <div class="cal-hdr">JUE</div>
-        <div class="cal-hdr">VIE</div>
-        <div class="cal-hdr">SÁB</div>
-      </div>
-      <div class="cal-grid" id="cal-grid"></div>
+      <h2>Cargá tu reporte de trades</h2>
+      <p>Arrastrá el archivo Excel exportado desde MT4/MT5 o hacé click para seleccionarlo</p>
+      <span class="drop-hint">Trade History Report (.xlsx)</span>
     </div>
 
-    <div class="chart-section">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-        <div class="section-title" style="margin-bottom:0;">Curva de P&L acumulado</div>
-        <button class="reset-btn" onclick="App.exportChart()" style="margin:0;">Descargar Gráfico</button>
+    <div id="error-box"></div>
+    <div id="loading">
+      <div class="spinner"></div>Procesando trades...
+    </div>
+
+    <div id="results">
+      <div class="account-bar" id="account-bar"></div>
+      <div class="metrics-grid" id="metrics-grid"></div>
+
+      <div class="cal-wrap">
+        <div class="month-nav">
+          <h3 id="month-title"></h3>
+          <button class="nav-btn" id="prev-btn" onclick="changeMonth(-1)">&#8592;</button>
+          <button class="nav-btn" id="next-btn" onclick="changeMonth(1)">&#8594;</button>
+        </div>
+        <div class="cal-headers">
+          <div class="cal-hdr">DOM</div>
+          <div class="cal-hdr">LUN</div>
+          <div class="cal-hdr">MAR</div>
+          <div class="cal-hdr">MIÉ</div>
+          <div class="cal-hdr">JUE</div>
+          <div class="cal-hdr">VIE</div>
+          <div class="cal-hdr">SÁB</div>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
       </div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 24px;">
-        <div style="position:relative;width:100%;height:340px;">
-          <canvas id="pnl-line-chart" role="img" aria-label="Gráfico de línea del P&L acumulado por día"></canvas>
+
+      <div class="chart-section">
+        <div class="section-title">Curva de P&L acumulado</div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 24px;">
+          <div style="position:relative;width:100%;height:340px;">
+            <canvas id="pnl-line-chart" role="img" aria-label="Gráfico de línea del P&L acumulado por día"></canvas>
+          </div>
         </div>
       </div>
+
+      <div class="chart-section">
+        <div class="section-title">P&L neto por día</div>
+        <div id="bar-chart"></div>
+      </div>
+
     </div>
 
-    <div class="chart-section">
-      <div class="section-title">P&L neto por día</div>
-      <div id="bar-chart"></div>
-    </div>
+  </main>
 
-    <div class="chart-section" id="highlights-section" style="display:none;">
-      <div class="section-title">Highlights del Periodo</div>
-      <div class="highlights-grid" id="highlights-grid"></div>
-    </div>
+  <div class="tooltip" id="tooltip"></div>
 
-  </div>
+  <script>
+    let allData = {};
+    let currentYear, currentMonth;
+    let months = [];
+    let monthIdx = 0;
 
-</main>
+    const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-<div class="tooltip" id="tooltip"></div>
-
-<script>
-/**
- * Trade Calendar - Modular Refactor
- */
-
-const App = {
-  data: {
-    allTrades: [],
-    daily: {},
-    months: [],
-    monthIdx: 0,
-    metrics: {},
-    account: {}
-  },
-
-  config: {
-    MONTH_NAMES: ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'],
-    charts: { pnlLine: null }
-  },
-
-  init() {
-    this.bindEvents();
-  },
-
-  bindEvents() {
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('file-input');
+    const errorBox = document.getElementById('error-box');
+    const loading = document.getElementById('loading');
+    const results = document.getElementById('results');
+    const tooltip = document.getElementById('tooltip');
 
     dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-    dropZone.addEventListener('drop', e => {
-      e.preventDefault();
-      dropZone.classList.remove('drag-over');
-      const f = e.dataTransfer.files[0];
-      if (f) this.processFile(f);
-    });
+    dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) processFile(f); });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) processFile(e.target.files[0]); });
 
-    fileInput.addEventListener('change', e => {
-      if (e.target.files[0]) this.processFile(e.target.files[0]);
-    });
-  },
-
-  showError(msg) {
-    const errBox = document.getElementById('error-box');
-    errBox.textContent = msg;
-    errBox.style.display = 'block';
-    document.getElementById('loading').style.display = 'none';
-  },
-
-  processFile(file) {
-    document.getElementById('error-box').style.display = 'none';
-    document.getElementById('loading').style.display = 'block';
-    document.getElementById('results').style.display = 'none';
-
-    const reader = new FileReader();
-    reader.onload = e => {
-      try {
-        const wb = XLSX.read(e.target.result, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-        this.parseData(raw);
-      } catch(err) {
-        console.error(err);
-        this.showError('No se pudo leer el archivo. Asegurate de exportar el reporte desde MT4/MT5 en formato .xlsx');
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  },
-
-  parseData(raw) {
-    let headerRow = -1;
-    const account = { name: '', num: '', company: '' };
-
-    // Find Header and Account Info
-    for (let i = 0; i < Math.min(raw.length, 30); i++) {
-      const row = raw[i];
-      const first = String(row[0] || '').trim();
-      if (first === 'Name:') account.name = String(row[3] || '').trim();
-      if (first === 'Account:') account.num = String(row[3] || '').trim();
-      if (first === 'Company:') account.company = String(row[3] || '').trim();
-      if (first === 'Time' && String(row[1] || '').trim() === 'Position') { headerRow = i; break; }
+    function showError(msg) {
+      errorBox.textContent = msg;
+      errorBox.style.display = 'block';
+      loading.style.display = 'none';
     }
 
-    if (headerRow === -1) {
-      this.showError('Formato no reconocido. Exportá el reporte desde MT4/MT5: Account History → All History → clic derecho → Save as Report.');
-      return;
+    function processFile(file) {
+      errorBox.style.display = 'none';
+      loading.style.display = 'block';
+      results.style.display = 'none';
+
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const wb = XLSX.read(e.target.result, { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+          parseAndRender(raw);
+        } catch (err) {
+          showError('No se pudo leer el archivo. Asegurate de exportar el reporte desde MT4/MT5 en formato .xlsx');
+        }
+      };
+      reader.readAsArrayBuffer(file);
     }
 
-    const trades = [];
-    for (let i = headerRow + 1; i < raw.length; i++) {
+    function parseAndRender(raw) {
+      // Find account info
+      let accountName = '', accountNum = '', company = '';
+      let headerRow = -1;
+
+      for (let i = 0; i < Math.min(raw.length, 20); i++) {
         const row = raw[i];
-        if (!row[0] || !row[3]) continue;
-        const type = String(row[3]).trim().toLowerCase();
-        if (type !== 'buy' && type !== 'sell') continue;
+        const first = String(row[0] || '').trim();
+        if (first === 'Name:') accountName = String(row[3] || '').trim();
+        if (first === 'Account:') accountNum = String(row[3] || '').trim();
+        if (first === 'Company:') company = String(row[3] || '').trim();
+        if (first === 'Time' && String(row[1] || '').trim() === 'Position') { headerRow = i; break; }
+      }
 
+      if (headerRow === -1) {
+        showError('Formato no reconocido. Exportá el reporte desde MT4/MT5: Account History → All History → clic derecho → Save as Report.');
+        return;
+      }
+
+      const trades = [];
+      for (let i = headerRow + 1; i < raw.length; i++) {
+        const row = raw[i];
+        if (!row[0]) continue;
+        const type = String(row[3] || '').trim().toLowerCase();
+        if (type !== 'buy' && type !== 'sell') continue;
+        const vol = parseFloat(row[4]);
         const profit = parseFloat(row[12]);
+        if (isNaN(vol) || isNaN(profit)) continue;
+        const openStr = String(row[0]).trim();
+        const dateParts = openStr.match(/^(\d{4})\.(\d{2})\.(\d{2})/);
+        if (!dateParts) continue;
+        const dateKey = `${dateParts[1]}-${dateParts[2]}-${dateParts[3]}`;
         const commission = parseFloat(row[10]) || 0;
         const swap = parseFloat(row[11]) || 0;
-        if (isNaN(profit)) continue;
+        trades.push({ date: dateKey, profit, commission, swap, net: profit + commission + swap, type, vol });
+      }
 
-        const dateStr = String(row[0]).trim();
-        const dMatch = dateStr.match(/^(\d{4})\.(\d{2})\.(\d{2})/);
-        if (!dMatch) continue;
+      if (trades.length === 0) {
+        showError('No se encontraron trades en el archivo. Verificá que el reporte incluya historial de operaciones cerradas.');
+        return;
+      }
 
-        trades.push({
-            date: `${dMatch[1]}-${dMatch[2]}-${dMatch[3]}`,
-            profit, commission, swap,
-            net: profit + commission + swap,
-            type,
-            symbol: String(row[2] || '').trim(),
-            vol: parseFloat(row[4]) || 0
-        });
+      // Group by date
+      const byDate = {};
+      trades.forEach(t => {
+        if (!byDate[t.date]) byDate[t.date] = [];
+        byDate[t.date].push(t);
+      });
+
+      const daily = {};
+      Object.keys(byDate).forEach(date => {
+        const ts = byDate[date];
+        const profits = ts.map(t => t.profit);
+        const nets = ts.map(t => t.net);
+        const winners = ts.filter(t => t.profit > 0);
+        const losers = ts.filter(t => t.profit < 0);
+        daily[date] = {
+          date,
+          trades: ts.length,
+          net: nets.reduce((a, b) => a + b, 0),
+          grossProfit: winners.reduce((a, t) => a + t.profit, 0),
+          grossLoss: losers.reduce((a, t) => a + t.profit, 0),
+          wins: winners.length,
+          losses: losers.length,
+          best: Math.max(...profits),
+          worst: Math.min(...profits),
+          wr: (winners.length / ts.length * 100),
+        };
+      });
+
+      allData = { daily, accountName, accountNum, company, totalTrades: trades.length };
+
+      // Build months list
+      const dateKeys = Object.keys(daily).sort();
+      const monthSet = new Set(dateKeys.map(d => d.slice(0, 7)));
+      months = Array.from(monthSet).sort();
+      monthIdx = months.length - 1;
+
+      loading.style.display = 'none';
+      dropZone.style.display = 'none';
+      results.style.display = 'block';
+
+      renderAll();
     }
 
-    if (trades.length === 0) {
-      this.showError('No se encontraron trades en el archivo.');
-      return;
+    let pnlLineChart = null;
+
+    function renderAll() {
+      renderAccountBar();
+      renderMetrics();
+      renderCalendar();
+      renderLineChart();
+      renderBars();
     }
 
-    this.data.allTrades = trades;
-    this.data.account = account;
-    this.calculateMetrics();
-    this.render();
-  },
+    function renderLineChart() {
+      const days = Object.values(allData.daily).sort((a, b) => a.date.localeCompare(b.date));
 
-  calculateMetrics() {
-    const trades = this.data.allTrades;
-    const byDate = {};
-
-    let totalNet = 0;
-    let grossProfit = 0;
-    let grossLoss = 0;
-    let maxEquity = 0;
-    let maxDD = 0;
-    let currentEquity = 0;
-
-    trades.forEach(t => {
-      totalNet += t.net;
-      if (t.net > 0) grossProfit += t.net;
-      else grossLoss += Math.abs(t.net);
-
-      // Drawdown calc
-      currentEquity += t.net;
-      if (currentEquity > maxEquity) maxEquity = currentEquity;
-      const dd = maxEquity - currentEquity;
-      if (dd > maxDD) maxDD = dd;
-
-      if (!byDate[t.date]) byDate[t.date] = { date: t.date, trades: [], net: 0, wins: 0, losses: 0, grossWin: 0, grossLoss: 0 };
-      const d = byDate[t.date];
-      d.trades.push(t);
-      d.net += t.net;
-      if (t.net >= 0) { d.wins++; d.grossWin += t.net; }
-      else { d.losses++; d.grossLoss += Math.abs(t.net); }
-    });
-
-    // Monthly grouping for calendar
-    const monthSet = new Set(Object.keys(byDate).map(d => d.slice(0, 7)));
-    this.data.months = Array.from(monthSet).sort();
-    this.data.monthIdx = this.data.months.length - 1;
-    this.data.daily = byDate;
-
-    this.data.metrics = {
-        totalNet,
-        grossProfit,
-        grossLoss,
-        profitFactor: grossLoss === 0 ? grossProfit : (grossProfit / grossLoss),
-        totalTrades: trades.length,
-        winRate: (trades.filter(t => t.net > 0).length / trades.length) * 100,
-        maxDD,
-        bestTrade: Math.max(...trades.map(t => t.net)),
-        worstTrade: Math.min(...trades.map(t => t.net))
-    };
-  },
-
-  render() {
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('drop-zone').style.display = 'none';
-    document.getElementById('results').style.display = 'block';
-
-    this.renderAccountBar();
-    this.renderMetrics();
-    this.renderCalendar();
-    this.renderCharts();
-    this.renderHighlights();
-  },
-
-  renderAccountBar() {
-    const { name, num, company } = this.data.account;
-    document.getElementById('account-bar').innerHTML = `
-      <div style="width:36px;height:36px;background:var(--accent-dim);border:1px solid rgba(127,255,178,0.2);border-radius:9px;display:flex;align-items:center;justify-content:center;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-      </div>
-      <div>
-        <div class="acc-name">${name || 'Cuenta MT'}</div>
-        <div class="acc-detail">${num ? num.split(' ')[0] : ''} ${company ? '· ' + company : ''}</div>
-      </div>
-      <button class="reset-btn" onclick="App.reset()">&#8592; Cargar otro</button>
-    `;
-  },
-
-  renderMetrics() {
-    const m = this.data.metrics;
-    const grid = document.getElementById('metrics-grid');
-    
-    // Calculate best day for the metric card (highest daily net)
-    const days = Object.values(this.data.daily);
-    const bestDay = days.length > 0 ? Math.max(...days.map(d => d.net)) : 0;
-
-    grid.innerHTML = `
-      <div class="metric-card">
-        <div class="m-label">P&L NETO TOTAL</div>
-        <div class="m-value ${m.totalNet >= 0 ? 'green' : 'red'}">${this.fmt(m.totalNet)}</div>
-      </div>
-      <div class="metric-card">
-        <div class="m-label">TRADES TOTALES</div>
-        <div class="m-value">${m.totalTrades}</div>
-      </div>
-      <div class="metric-card">
-        <div class="m-label">WIN RATE GLOBAL</div>
-        <div class="m-value ${m.winRate >= 50 ? 'green' : 'amber'}">${m.winRate.toFixed(1)}%</div>
-      </div>
-      <div class="metric-card">
-        <div class="m-label">MEJOR DÍA</div>
-        <div class="m-value green">${this.fmt(bestDay)}</div>
-      </div>
-    `;
-  },
-
-  renderCalendar() {
-    const ym = this.data.months[this.data.monthIdx];
-    if (!ym) return;
-    const [year, month] = ym.split('-').map(Number);
-    document.getElementById('month-title').textContent = `${this.config.MONTH_NAMES[month - 1]} ${year}`;
-
-    const grid = document.getElementById('cal-grid');
-    grid.innerHTML = '';
-
-    const firstDay = new Date(year, month - 1, 1).getDay();
-    const daysInMonth = new Date(year, month, 0).getDate();
-
-    for (let i = 0; i < firstDay; i++) {
-        const el = document.createElement('div');
-        el.className = 'cal-cell empty';
-        grid.appendChild(el);
-    }
-
-    for (let d = 1; d <= daysInMonth; d++) {
-        const dateKey = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-        const info = this.data.daily[dateKey];
-        const cell = document.createElement('div');
-
-        if (info) {
-            const wr = (info.wins / info.trades.length) * 100;
-            cell.className = `cal-cell ${info.net >= 0 ? 'win' : 'loss'}`;
-            cell.innerHTML = `
-                <div class="cell-day">${d}</div>
-                <div class="cell-pnl ${info.net >= 0 ? 'pos' : 'neg'}">${this.fmt(info.net)}</div>
-                <div class="cell-meta">${info.trades.length} trades</div>
-                <div class="cell-wr ${wr >= 50 ? 'good' : 'bad'}">${wr.toFixed(1)}% WR</div>
-            `;
-            cell.addEventListener('mouseenter', e => this.showTip(e, info));
-            cell.addEventListener('mousemove', e => this.moveTip(e));
-            cell.addEventListener('mouseleave', () => this.hideTip());
-        } else {
-            cell.className = 'cal-cell no-trade';
-            cell.innerHTML = `<div class="cell-day">${d}</div>`;
-        }
-        grid.appendChild(cell);
-    }
-
-    document.getElementById('prev-btn').disabled = this.data.monthIdx === 0;
-    document.getElementById('next-btn').disabled = this.data.monthIdx === this.data.months.length - 1;
-  },
-
-  renderCharts() {
-    const days = Object.values(this.data.daily).sort((a,b) => a.date.localeCompare(b.date));
-    const labels = ['Inicio'];
-    const pnlData = [0];
-    let cumulative = 0;
-
-    days.forEach(d => {
+      // Build cumulative PNL
+      let cumulative = 0;
+      const labels = [];
+      const cumulData = [];
+      days.forEach(d => {
         cumulative += d.net;
-        labels.push(d.date.slice(5).replace('-','/'));
-        pnlData.push(parseFloat(cumulative.toFixed(2)));
-    });
+        labels.push(d.date.slice(5).replace('-', '/'));
+        cumulData.push(parseFloat(cumulative.toFixed(2)));
+      });
 
-    if (this.config.charts.pnlLine) this.config.charts.pnlLine.destroy();
+      // Add a $0 point at start
+      labels.unshift('inicio');
+      cumulData.unshift(0);
 
-    const ctx = document.getElementById('pnl-line-chart').getContext('2d');
-    const isPos = cumulative >= 0;
-    const color = isPos ? '#7fffb2' : '#ff6b6b';
+      // Destroy previous chart if exists
+      if (pnlLineChart) { pnlLineChart.destroy(); pnlLineChart = null; }
 
-    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-    gradient.addColorStop(0, isPos ? 'rgba(127,255,178,0.15)' : 'rgba(255,107,107,0.15)');
-    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+      const isPositive = cumulData[cumulData.length - 1] >= 0;
+      const lineColor = isPositive ? '#7fffb2' : '#ff6b6b';
+      const fillColor = isPositive ? 'rgba(127,255,178,0.08)' : 'rgba(255,107,107,0.08)';
 
-    this.config.charts.pnlLine = new Chart(ctx, {
+      const ctx = document.getElementById('pnl-line-chart').getContext('2d');
+
+      // Gradient fill
+      const gradient = ctx.createLinearGradient(0, 0, 0, 260);
+      gradient.addColorStop(0, isPositive ? 'rgba(127,255,178,0.18)' : 'rgba(255,107,107,0.18)');
+      gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+      pnlLineChart = new Chart(ctx, {
         type: 'line',
         data: {
           labels,
           datasets: [{
-            data: pnlData,
-            borderColor: color,
+            data: cumulData,
+            borderColor: lineColor,
             borderWidth: 2,
-            pointRadius: 0,
-            pointHoverRadius: 5,
+            pointRadius: (ctx) => ctx.dataIndex === 0 ? 0 : 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: lineColor,
+            pointBorderColor: '#161920',
+            pointBorderWidth: 2,
             fill: true,
             backgroundColor: gradient,
-            tension: 0.4
+            tension: 0.45,
           }]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { 
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: '#1e2229',
-                    bodyFont: { family: 'DM Mono' },
-                    callbacks: {
-                        label: (item) => this.fmt(item.raw)
-                    }
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#1e2229',
+              borderColor: 'rgba(255,255,255,0.13)',
+              borderWidth: 1,
+              titleColor: '#6b7280',
+              bodyColor: lineColor,
+              titleFont: { family: 'DM Mono', size: 11 },
+              bodyFont: { family: 'DM Mono', size: 14, weight: '500' },
+              padding: 12,
+              callbacks: {
+                title: (items) => items[0].label,
+                label: (item) => {
+                  const v = item.raw;
+                  return (v >= 0 ? '+$' : '-$') + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 }
-            },
-            scales: {
-                x: { grid: { display: false }, ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 10 } } },
-                y: { 
-                    grid: { color: 'rgba(255,255,255,0.03)' }, 
-                    ticks: { 
-                        color: '#6b7280', 
-                        font: { family: 'DM Mono', size: 10 },
-                        callback: (v) => this.fmt(v).split('.')[0]
-                    } 
-                }
+              }
             }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(255,255,255,0.04)' },
+              ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 10 }, maxRotation: 0 },
+              border: { color: 'rgba(255,255,255,0.07)' }
+            },
+            y: {
+              grid: { color: 'rgba(255,255,255,0.04)' },
+              ticks: {
+                color: '#6b7280',
+                font: { family: 'DM Mono', size: 10 },
+                callback: v => (v >= 0 ? '+$' : '-$') + Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 0 })
+              },
+              border: { color: 'rgba(255,255,255,0.07)' }
+            }
+          }
         }
-    });
+      });
+    }
 
-    // Bar Chart
-    const barContainer = document.getElementById('bar-chart');
-    barContainer.innerHTML = '';
-    const maxAbs = Math.max(...days.map(d => Math.abs(d.net)));
+    function renderAccountBar() {
+      const { accountName, accountNum, company } = allData;
+      document.getElementById('account-bar').innerHTML = `
+    <div style="width:36px;height:36px;background:var(--accent-dim);border:1px solid rgba(127,255,178,0.2);border-radius:9px;display:flex;align-items:center;justify-content:center;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+    </div>
+    <div>
+      <div class="acc-name">${accountName || 'Cuenta MT'}</div>
+      <div class="acc-detail">${accountNum ? accountNum.split(' ')[0] : ''} ${company ? '· ' + company : ''}</div>
+    </div>
+    <button class="reset-btn" onclick="resetApp()">&#8592; Cargar otro archivo</button>
+  `;
+    }
 
-    days.slice(-15).forEach(d => {
-        const pct = Math.round((Math.abs(d.net) / maxAbs) * 100);
+    function renderMetrics() {
+      const d = allData.daily;
+      const days = Object.values(d);
+      const totalNet = days.reduce((a, x) => a + x.net, 0);
+      const totalTrades = days.reduce((a, x) => a + x.trades, 0);
+      const totalWins = days.reduce((a, x) => a + x.wins, 0);
+      const totalLosses = days.reduce((a, x) => a + x.losses, 0);
+      const grossLoss = days.reduce((a, x) => a + x.grossLoss, 0);
+      const bestDay = Math.max(...days.map(x => x.net));
+      const wr = (totalWins / totalTrades * 100);
+
+      document.getElementById('metrics-grid').innerHTML = `
+    <div class="metric-card">
+      <div class="m-label">P&L neto total</div>
+      <div class="m-value ${totalNet >= 0 ? 'green' : 'red'}">${fmtMoney(totalNet)}</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Trades totales</div>
+      <div class="m-value">${totalTrades}</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Win rate global</div>
+      <div class="m-value ${wr >= 50 ? 'green' : 'amber'}">${wr.toFixed(1)}%</div>
+    </div>
+
+    <div class="metric-card">
+      <div class="m-label">Mejor día</div>
+      <div class="m-value green">${fmtMoney(bestDay)}</div>
+    </div>
+  `;
+    }
+
+    function renderCalendar() {
+      const ym = months[monthIdx];
+      const [year, month] = ym.split('-').map(Number);
+      const monthName = MONTH_NAMES[month - 1];
+      document.getElementById('month-title').textContent = `${monthName} ${year}`;
+      document.getElementById('prev-btn').disabled = monthIdx === 0;
+      document.getElementById('next-btn').disabled = monthIdx === months.length - 1;
+
+      const grid = document.getElementById('cal-grid');
+      grid.innerHTML = '';
+
+      const firstDay = new Date(year, month - 1, 1).getDay();
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+      for (let i = 0; i < firstDay; i++) {
+        const el = document.createElement('div');
+        el.className = 'cal-cell empty';
+        grid.appendChild(el);
+      }
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const info = allData.daily[dateKey];
+        const cell = document.createElement('div');
+        const isToday = dateKey === todayStr;
+
+        if (info) {
+          cell.className = 'cal-cell ' + (info.net >= 0 ? 'win' : 'loss') + (isToday ? ' today' : '');
+          cell.innerHTML = `
+        <div class="cell-day">${d}</div>
+        <div class="cell-pnl ${info.net >= 0 ? 'pos' : 'neg'}">${fmtMoney(info.net)}</div>
+        <div class="cell-meta">${info.trades} trades</div>
+        <div class="cell-wr ${info.wr >= 50 ? 'good' : 'bad'}">${info.wr.toFixed(1)}% WR</div>
+      `;
+          cell.addEventListener('mouseenter', ev => showTip(ev, info));
+          cell.addEventListener('mousemove', moveTip);
+          cell.addEventListener('mouseleave', hideTip);
+        } else {
+          cell.className = 'cal-cell no-trade' + (isToday ? ' today' : '');
+          cell.innerHTML = `<div class="cell-day">${d}</div>`;
+        }
+        grid.appendChild(cell);
+      }
+    }
+
+    function changeMonth(dir) {
+      monthIdx = Math.max(0, Math.min(months.length - 1, monthIdx + dir));
+      renderCalendar();
+    }
+
+    function renderBars() {
+      const days = Object.values(allData.daily).sort((a, b) => a.date.localeCompare(b.date));
+      const maxAbs = Math.max(...days.map(d => Math.abs(d.net)));
+      const container = document.getElementById('bar-chart');
+      container.innerHTML = '';
+      days.forEach(d => {
+        const pct = Math.round(Math.abs(d.net) / maxAbs * 100);
+        const label = d.date.slice(5).replace('-', '/');
         const row = document.createElement('div');
         row.className = 'bar-row';
         row.innerHTML = `
-            <div class="bar-date">${d.date.slice(5).replace('-','/')}</div>
-            <div class="bar-track"><div class="bar-fill ${d.net>=0?'pos':'neg'}" style="width:${pct}%">${this.fmt(d.net)}</div></div>
-            <div class="bar-trades">${d.trades.length} trades</div>
-        `;
-        barContainer.appendChild(row);
-    });
-  },
-
-  renderHighlights() {
-    // Hidden to match reference Image 1
-    document.getElementById('highlights-section').style.display = 'none';
-  },
-
-  changeMonth(dir) {
-    this.data.monthIdx = Math.max(0, Math.min(this.data.months.length - 1, this.data.monthIdx + dir));
-    this.renderCalendar();
-  },
-
-  fmt(v) {
-    const abs = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return (v >= 0 ? '+$' : '-$') + abs;
-  },
-
-  showTip(e, info) {
-    const tt = document.getElementById('tooltip');
-    tt.innerHTML = `
-      <div class="tt-title">${info.date}</div>
-      <div class="tt-row"><span class="tt-label">Neto</span><span class="tt-val ${info.net>=0?'pos':'neg'}">${this.fmt(info.net)}</span></div>
-      <div class="tt-row"><span class="tt-label">Bruto Ganancia</span><span class="tt-val pos">${this.fmt(info.grossWin)}</span></div>
-      <div class="tt-row"><span class="tt-label">Bruto Pérdida</span><span class="tt-val neg">-${this.fmt(info.grossLoss)}</span></div>
-      <div class="tt-row"><span class="tt-label">Trades</span><span class="tt-val">${info.trades.length}</span></div>
+      <div class="bar-date">${label}</div>
+      <div class="bar-track">
+        <div class="bar-fill ${d.net >= 0 ? 'pos' : 'neg'}" style="width:${pct}%">${fmtMoney(d.net)}</div>
+      </div>
+      <div class="bar-trades">${d.trades} ops</div>
     `;
-    tt.style.display = 'block';
-    this.moveTip(e);
-  },
+        container.appendChild(row);
+      });
+    }
 
-  moveTip(e) {
-    const tt = document.getElementById('tooltip');
-    let x = e.clientX + 15, y = e.clientY - 10;
-    if (x + 220 > window.innerWidth) x = e.clientX - 235;
-    tt.style.left = x + 'px';
-    tt.style.top = y + 'px';
-  },
 
-  hideTip() { document.getElementById('tooltip').style.display = 'none'; },
 
-  exportChart() {
-    const canvas = document.getElementById('pnl-line-chart');
-    const link = document.createElement('a');
-    link.download = `pnl-chart-${this.data.account.num || 'report'}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-  },
+    function showTip(e, info) {
+      tooltip.innerHTML = `
+    <div class="tt-title">${info.date}</div>
+    <div class="tt-row"><span class="tt-label">P&L neto</span><span class="tt-val ${info.net >= 0 ? 'pos' : 'neg'}">${fmtMoney(info.net)}</span></div>
+    <div class="tt-row"><span class="tt-label">Bruto ganado</span><span class="tt-val pos">${fmtMoney(info.grossProfit)}</span></div>
+    <div class="tt-row"><span class="tt-label">Bruto perdido</span><span class="tt-val neg">${fmtMoney(info.grossLoss)}</span></div>
+    <div class="tt-row"><span class="tt-label">Trades</span><span class="tt-val">${info.trades}</span></div>
+    <div class="tt-row"><span class="tt-label">Win rate</span><span class="tt-val">${info.wr.toFixed(1)}%</span></div>
+    <div class="tt-row"><span class="tt-label">Mejor trade</span><span class="tt-val pos">${fmtMoney(info.best)}</span></div>
+    <div class="tt-row"><span class="tt-label">Peor trade</span><span class="tt-val neg">${fmtMoney(info.worst)}</span></div>
+  `;
+      tooltip.style.display = 'block';
+      moveTip(e);
+    }
+    function moveTip(e) {
+      let x = e.clientX + 14, y = e.clientY - 10;
+      if (x + 220 > window.innerWidth) x = e.clientX - 230;
+      tooltip.style.left = x + 'px';
+      tooltip.style.top = y + 'px';
+    }
+    function hideTip() { tooltip.style.display = 'none'; }
 
-  reset() {
-    location.reload();
-  }
-};
+    function fmtMoney(v) {
+      const abs = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return (v >= 0 ? '+$' : '-$') + abs;
+    }
 
-window.changeMonth = (dir) => App.changeMonth(dir);
-
-document.addEventListener('DOMContentLoaded', () => App.init());
-</script>
+    function resetApp() {
+      results.style.display = 'none';
+      dropZone.style.display = 'block';
+      fileInput.value = '';
+      errorBox.style.display = 'none';
+      allData = {};
+      months = [];
+    }
+  </script>
 </body>
+
 </html>
