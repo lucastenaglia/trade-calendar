@@ -805,6 +805,17 @@
         transform: translateY(0);
       }
     }
+    .cell-pct {
+      font-size: 10px;
+      font-family: var(--mono);
+      font-weight: 600;
+      opacity: 0.85;
+      margin-top: 1px;
+    }
+
+    .cell-pct.pos { color: var(--green); }
+    .cell-pct.neg { color: var(--red); }
+
     /* CENT ACCOUNT TOGGLE */
     .cent-toggle {
       display: inline-flex;
@@ -1071,7 +1082,20 @@
           best: Math.max(...profits),
           worst: Math.min(...profits),
           wr: (winners.length / ts.length * 100),
+          totalLots: parseFloat(ts.reduce((a, t) => a + (t.vol || 0), 0).toFixed(2)),
         };
+      });
+
+      // Calcular porcentaje de cambio respecto al balance acumulado del día anterior
+      const sortedDates = Object.keys(daily).sort();
+      let runningBalance = 0;
+      sortedDates.forEach(dateKey => {
+        const prevBalance = runningBalance;
+        runningBalance += daily[dateKey].net;
+        daily[dateKey].prevBalance = prevBalance;
+        daily[dateKey].pctChange = prevBalance !== 0
+          ? (daily[dateKey].net / Math.abs(prevBalance)) * 100
+          : null; // sin balance previo no hay %
       });
 
       const buys = trades.filter(t => t.type === 'buy');
@@ -1306,9 +1330,13 @@
 
         if (info) {
           cell.className = 'cal-cell ' + (info.net >= 0 ? 'win' : 'loss') + (isToday ? ' today' : '');
+          const pctHtml = info.pctChange !== null
+            ? `<div class="cell-pct ${info.pctChange >= 0 ? 'pos' : 'neg'}">${info.pctChange >= 0 ? '+' : ''}${info.pctChange.toFixed(1)}%</div>`
+            : '';
           cell.innerHTML = `
         <div class="cell-day">${d}</div>
         <div class="cell-pnl ${info.net >= 0 ? 'pos' : 'neg'}">${fmtMoney(info.net)}</div>
+        ${pctHtml}
         <div class="cell-meta">${info.trades} trades</div>
         <div class="cell-wr ${info.wr >= 50 ? 'good' : 'bad'}">${info.wr.toFixed(1)}% WR</div>
       `;
@@ -1339,7 +1367,7 @@
           weekNum++;
           weekStart = d;
         }
-        if (!weeks[weekNum]) weeks[weekNum] = { net: 0, trades: 0, wins: 0, days: [] };
+        if (!weeks[weekNum]) weeks[weekNum] = { net: 0, trades: 0, wins: 0, lots: 0, days: [] };
 
         const dateKey = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
         const info = allData.daily[dateKey];
@@ -1347,6 +1375,7 @@
           weeks[weekNum].net += info.net;
           weeks[weekNum].trades += info.trades;
           weeks[weekNum].wins += info.wins;
+          weeks[weekNum].lots += info.totalLots || 0;
           weeks[weekNum].days.push(info);
         }
       }
@@ -1379,6 +1408,7 @@
               <div class="tt-title">Week ${i + 1}</div>
               <div class="tt-row"><span class="tt-label">P&L neto</span><span class="tt-val ${wk.net >= 0 ? 'pos' : 'neg'}">${fmtMoney(wk.net)}</span></div>
               <div class="tt-row"><span class="tt-label">Trades</span><span class="tt-val">${wk.trades}</span></div>
+              <div class="tt-row"><span class="tt-label">Lotes</span><span class="tt-val">${parseFloat(wk.lots.toFixed(2))}</span></div>
               <div class="tt-row"><span class="tt-label">Win rate</span><span class="tt-val ${wr >= 50 ? 'pos' : 'neg'}">${wr.toFixed(1)}%</span></div>
             `;
             tooltip.style.display = 'block';
@@ -1501,6 +1531,7 @@
     <div class="tt-row"><span class="tt-label">Bruto ganado</span><span class="tt-val pos">${fmtMoney(info.grossProfit)}</span></div>
     <div class="tt-row"><span class="tt-label">Bruto perdido</span><span class="tt-val neg">${fmtMoney(info.grossLoss)}</span></div>
     <div class="tt-row"><span class="tt-label">Trades</span><span class="tt-val">${info.trades}</span></div>
+    <div class="tt-row"><span class="tt-label">Lotes</span><span class="tt-val">${info.totalLots != null ? info.totalLots : '—'}</span></div>
     <div class="tt-row"><span class="tt-label">Win rate</span><span class="tt-val">${info.wr.toFixed(1)}%</span></div>
     <div class="tt-row"><span class="tt-label">Mejor trade</span><span class="tt-val pos">${fmtMoney(info.best)}</span></div>
     <div class="tt-row"><span class="tt-label">Peor trade</span><span class="tt-val neg">${fmtMoney(info.worst)}</span></div>
