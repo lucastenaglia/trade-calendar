@@ -114,13 +114,17 @@
       background: rgba(127, 255, 178, 0.04);
     }
 
-    #drop-zone input {
+    #drop-zone #file-input {
       position: absolute;
       inset: 0;
       opacity: 0;
       cursor: pointer;
       width: 100%;
       height: 100%;
+    }
+
+    #drop-zone #htm-input {
+      display: none;
     }
 
     .drop-icon {
@@ -877,10 +881,17 @@
       <h2>Cargá tu reporte de trades</h2>
       <p>Arrastrá el archivo Excel exportado desde MT4/MT5 o hacé click para seleccionarlo</p>
       <span class="drop-hint">Trade History Report (.xlsx)</span>
-      <div style="margin-top:20px;">
+      <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;align-items:center;">
         <button class="cent-toggle" id="cent-toggle-btn" onclick="toggleCent()">
           <span>¢ Cuenta Cent</span>
         </button>
+        <label style="cursor:pointer;position:relative;z-index:10;">
+          <input type="file" accept=".htm,.html" id="htm-input">
+          <span class="cent-toggle" style="display:inline-flex;align-items:center;gap:8px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+            Strategy Tester (.htm)
+          </span>
+        </label>
       </div>
     </div>
 
@@ -953,8 +964,9 @@
 
     dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-    dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) processFile(f); });
+    dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) { if (f.name.endsWith('.htm') || f.name.endsWith('.html')) processHtmFile(f); else processFile(f); } });
     fileInput.addEventListener('change', e => { if (e.target.files[0]) processFile(e.target.files[0]); });
+    document.getElementById('htm-input').addEventListener('change', e => { if (e.target.files[0]) processHtmFile(e.target.files[0]); });
 
     function showError(msg) {
       errorBox.textContent = msg;
@@ -979,6 +991,141 @@
         }
       };
       reader.readAsArrayBuffer(file);
+    }
+
+    function processHtmFile(file) {
+      errorBox.style.display = 'none';
+      loading.style.display = 'block';
+      results.style.display = 'none';
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          parseStrategyTester(e.target.result, file.name);
+        } catch (err) {
+          showError('No se pudo leer el archivo Strategy Tester: ' + err.message);
+        }
+      };
+      reader.readAsText(file, 'utf-8');
+    }
+
+    function parseStrategyTester(html, fileName) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+
+      // Server/account info from meta or divs
+      const serverMeta = doc.querySelector('meta[name="server"]');
+      const company = serverMeta ? serverMeta.getAttribute('content') : '';
+      const titleEl = doc.querySelector('title');
+      const accountName = titleEl ? titleEl.textContent.replace('Strategy Tester:', '').trim() || 'Strategy Tester' : 'Strategy Tester';
+
+      // Find the trades table: the one with header containing "Profit" and "Balance"
+      let tradeTable = null;
+      doc.querySelectorAll('table').forEach(t => {
+        if (t.textContent.includes('Profit') && t.textContent.includes('Balance')) tradeTable = t;
+      });
+      if (!tradeTable) { showError('No se encontró tabla de trades en el archivo Strategy Tester.'); return; }
+
+      const rows = Array.from(tradeTable.querySelectorAll('tr'));
+      const trades = [];
+      let initialBalance = 0;
+      let initialBalanceFound = false;
+      const orderType = {}; // order# -> 'buy'|'sell'
+
+      rows.forEach(row => {
+        const cells = Array.from(row.querySelectorAll('td'));
+        if (cells.length < 8) return;
+
+        const type = (cells[2].textContent || '').trim().toLowerCase();
+        const isClosed = type === 'close' || type === 's/l' || type === 't/p';
+        const isOpen = type === 'buy' || type === 'sell';
+
+        if (!isClosed && !isOpen) return;
+
+        const orderNum = (cells[3].textContent || '').trim();
+        const dateRaw = (cells[1].textContent || '').trim();
+        const dateParts = dateRaw.match(/^(\d{4})\.(\d{2})\.(\d{2})/);
+        if (!dateParts) return;
+        const dateKey = `${dateParts[1]}-${dateParts[2]}-${dateParts[3]}`;
+
+        const vol = parseFloat(cells[4].textContent) || 0;
+
+        if (isOpen) {
+          orderType[orderNum] = type; // guardar 'buy' o 'sell'
+        }
+
+        if (isClosed) {
+          const profit = parseFloat(cells[8].textContent);
+          const balance = parseFloat(cells[9].textContent);
+          if (isNaN(profit)) return;
+          if (!initialBalanceFound && !isNaN(balance)) {
+            initialBalance = balance - profit;
+            initialBalanceFound = true;
+          }
+          const tradeType = orderType[orderNum] || 'buy';
+          trades.push({ date: dateKey, profit, net: profit, commission: 0, swap: 0, type: tradeType, vol });
+        }
+      });
+
+      if (trades.length === 0) { showError('No se encontraron trades cerrados en el Strategy Tester.'); return; }
+
+      // Group by date (reuse same logic)
+      const byDate = {};
+      trades.forEach(t => {
+        if (!byDate[t.date]) byDate[t.date] = [];
+        byDate[t.date].push(t);
+      });
+
+      const daily = {};
+      Object.keys(byDate).forEach(date => {
+        const ts = byDate[date];
+        const profits = ts.map(t => t.profit);
+        const winners = ts.filter(t => t.profit > 0);
+        const losers = ts.filter(t => t.profit < 0);
+        daily[date] = {
+          date,
+          trades: ts.length,
+          net: profits.reduce((a, b) => a + b, 0),
+          grossProfit: winners.reduce((a, t) => a + t.profit, 0),
+          grossLoss: losers.reduce((a, t) => a + t.profit, 0),
+          wins: winners.length,
+          losses: losers.length,
+          best: Math.max(...profits),
+          worst: Math.min(...profits),
+          wr: (winners.length / ts.length * 100),
+          totalLots: parseFloat(ts.reduce((a, t) => a + (t.vol || 0), 0).toFixed(2)),
+        };
+      });
+
+      // % change with running balance
+      const sortedDates = Object.keys(daily).sort();
+      let runningBalance = initialBalance;
+      sortedDates.forEach(dateKey => {
+        const balanceStartOfDay = runningBalance;
+        daily[dateKey].pctChange = balanceStartOfDay !== 0
+          ? (daily[dateKey].net / balanceStartOfDay) * 100
+          : null;
+        runningBalance += daily[dateKey].net;
+      });
+
+      const buys = trades.filter(t => t.type === 'buy');
+      const sells = trades.filter(t => t.type === 'sell');
+      const ratios = {
+        buys: buys.length,
+        sells: sells.length,
+        wrBuy: buys.length > 0 ? (buys.filter(t => t.net > 0).length / buys.length * 100) : 0,
+        wrSell: sells.length > 0 ? (sells.filter(t => t.net > 0).length / sells.length * 100) : 0
+      };
+      allData = { daily, accountName, accountNum: '', company, totalTrades: trades.length, ratios, initialBalance };
+
+      const dateKeys = Object.keys(daily).sort();
+      const monthSet = new Set(dateKeys.map(d => d.slice(0, 7)));
+      months = Array.from(monthSet).sort();
+      monthIdx = months.length - 1;
+
+      loading.style.display = 'none';
+      dropZone.style.display = 'none';
+      results.style.display = 'block';
+      renderAll();
     }
 
     function parseAndRender(raw) {
@@ -1016,6 +1163,9 @@
       }
 
       const trades = [];
+      let initialBalance = 0;
+      let initialBalanceFound = false;
+
       for (let i = headerRow + 1; i < raw.length; i++) {
         const row = raw[i];
         if (!row) continue;
@@ -1026,6 +1176,11 @@
           // Exness: Symbol | Position | Time | Type | Volume | Price | S/L | T/P | Market Price | Swap | Profit
           if (!row[0] || !row[2]) continue;
           type = String(row[3] || '').trim().toLowerCase();
+          // Capturar balance inicial (deposit/balance row)
+          if (!initialBalanceFound && (type === 'balance' || type === 'deposit' || type === 'credit')) {
+            const bal = parseFloat(row[10]);
+            if (!isNaN(bal) && bal > 0) { initialBalance = bal; initialBalanceFound = true; }
+          }
           if (type !== 'buy' && type !== 'sell') continue;
           vol = parseFloat(row[4]);
           profit = parseFloat(row[10]);
@@ -1035,6 +1190,11 @@
           // Standard MT4/MT5: Time | Position | Symbol | Type | Volume | ... | Commission | Swap | Profit
           if (!row[0]) continue;
           type = String(row[3] || '').trim().toLowerCase();
+          // Capturar balance inicial (deposit/balance row)
+          if (!initialBalanceFound && (type === 'balance' || type === 'deposit' || type === 'credit')) {
+            const bal = parseFloat(row[12]);
+            if (!isNaN(bal) && bal > 0) { initialBalance = bal; initialBalanceFound = true; }
+          }
           if (type !== 'buy' && type !== 'sell') continue;
           vol = parseFloat(row[4]);
           profit = parseFloat(row[12]);
@@ -1086,16 +1246,15 @@
         };
       });
 
-      // Calcular porcentaje de cambio respecto al balance acumulado del día anterior
+      // Calcular porcentaje de cambio respecto al balance real del inicio del día
       const sortedDates = Object.keys(daily).sort();
-      let runningBalance = 0;
+      let runningBalance = initialBalance;
       sortedDates.forEach(dateKey => {
-        const prevBalance = runningBalance;
+        const balanceStartOfDay = runningBalance;
+        daily[dateKey].pctChange = balanceStartOfDay !== 0
+          ? (daily[dateKey].net / balanceStartOfDay) * 100
+          : null;
         runningBalance += daily[dateKey].net;
-        daily[dateKey].prevBalance = prevBalance;
-        daily[dateKey].pctChange = prevBalance !== 0
-          ? (daily[dateKey].net / Math.abs(prevBalance)) * 100
-          : null; // sin balance previo no hay %
       });
 
       const buys = trades.filter(t => t.type === 'buy');
@@ -1107,7 +1266,7 @@
         wrSell: sells.length > 0 ? (sells.filter(t => t.net > 0).length / sells.length * 100) : 0
       };
 
-      allData = { daily, accountName, accountNum, company, totalTrades: trades.length, ratios };
+      allData = { daily, accountName, accountNum, company, totalTrades: trades.length, ratios, initialBalance };
 
       // Build months list
       const dateKeys = Object.keys(daily).sort();
@@ -1355,18 +1514,11 @@
 
     function calcWeeklyPnl(year, month) {
       const daysInMonth = new Date(year, month, 0).getDate();
+      const firstDay = new Date(year, month - 1, 1).getDay(); // igual que renderCalendar
       const weeks = [];
-      let weekNum = 0;
-      let weekStart = 1;
 
       for (let d = 1; d <= daysInMonth; d++) {
-        const dow = new Date(year, month - 1, d).getDay(); // 0=Sun
-        if (d === 1) weekNum = 0;
-        // Start a new week on Monday (1) except if d==1
-        if (d > 1 && dow === 1) {
-          weekNum++;
-          weekStart = d;
-        }
+        const weekNum = Math.floor((firstDay + d - 1) / 7);
         if (!weeks[weekNum]) weeks[weekNum] = { net: 0, trades: 0, wins: 0, lots: 0, days: [] };
 
         const dateKey = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
