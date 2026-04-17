@@ -885,7 +885,7 @@
         <button class="cent-toggle" id="cent-toggle-btn" onclick="toggleCent()">
           <span>¢ Cuenta Cent</span>
         </button>
-        <label style="cursor:pointer;position:relative;z-index:10;">
+        <label style="cursor:pointer;position:relative;z-index:10;" onclick="event.stopPropagation()">
           <input type="file" accept=".htm,.html" id="htm-input">
           <span class="cent-toggle" style="display:inline-flex;align-items:center;gap:8px;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
@@ -1105,6 +1105,7 @@
           ? (daily[dateKey].net / balanceStartOfDay) * 100
           : null;
         runningBalance += daily[dateKey].net;
+        daily[dateKey].endBalance = runningBalance;
       });
 
       const buys = trades.filter(t => t.type === 'buy');
@@ -1255,6 +1256,7 @@
           ? (daily[dateKey].net / balanceStartOfDay) * 100
           : null;
         runningBalance += daily[dateKey].net;
+        daily[dateKey].endBalance = runningBalance;
       });
 
       const buys = trades.filter(t => t.type === 'buy');
@@ -1679,6 +1681,7 @@
     function showTip(e, info) {
       tooltip.innerHTML = `
     <div class="tt-title">${info.date}</div>
+    <div class="tt-row"><span class="tt-label">Balance final</span><span class="tt-val">${info.endBalance != null ? fmtMoney(info.endBalance) : '—'}</span></div>
     <div class="tt-row"><span class="tt-label">P&L neto</span><span class="tt-val ${info.net >= 0 ? 'pos' : 'neg'}">${fmtMoney(info.net)}</span></div>
     <div class="tt-row"><span class="tt-label">Bruto ganado</span><span class="tt-val pos">${fmtMoney(info.grossProfit)}</span></div>
     <div class="tt-row"><span class="tt-label">Bruto perdido</span><span class="tt-val neg">${fmtMoney(info.grossLoss)}</span></div>
