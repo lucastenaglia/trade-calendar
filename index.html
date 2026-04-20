@@ -8,7 +8,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap"
     rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
   <style>
     *,
@@ -868,7 +868,7 @@
   <main>
 
     <div id="drop-zone">
-      <input type="file" accept=".xlsx,.xls" id="file-input">
+      <input type="file" accept=".xlsx,.xls,.json" id="file-input">
       <div class="drop-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
           stroke-linejoin="round">
@@ -879,8 +879,8 @@
         </svg>
       </div>
       <h2>Cargá tu reporte de trades</h2>
-      <p>Arrastrá el archivo Excel exportado desde MT4/MT5 o hacé click para seleccionarlo</p>
-      <span class="drop-hint">Trade History Report (.xlsx)</span>
+      <p>Arrastrá el .xlsx o el .json generado con convert_report.py</p>
+      <span class="drop-hint">Trade History Report (.xlsx) · JSON convertido (.json)</span>
       <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;align-items:center;">
         <button class="cent-toggle" id="cent-toggle-btn" onclick="toggleCent()">
           <span>¢ Cuenta Cent</span>
@@ -964,8 +964,8 @@
 
     dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-    dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) { if (f.name.endsWith('.htm') || f.name.endsWith('.html')) processHtmFile(f); else processFile(f); } });
-    fileInput.addEventListener('change', e => { if (e.target.files[0]) processFile(e.target.files[0]); });
+    dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) { if (f.name.endsWith('.htm') || f.name.endsWith('.html')) processHtmFile(f); else dispatchFile(f); } });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) dispatchFile(e.target.files[0]); });
     document.getElementById('htm-input').addEventListener('change', e => { if (e.target.files[0]) processHtmFile(e.target.files[0]); });
 
     function showError(msg) {
@@ -974,23 +974,156 @@
       loading.style.display = 'none';
     }
 
+    function dispatchFile(file) {
+      if (file.name.endsWith('.json')) processJsonFile(file);
+      else processFile(file);
+    }
+
+    function processJsonFile(file) {
+      errorBox.style.display = 'none';
+      loading.style.display = 'block';
+      loading.innerHTML = '<div class="spinner"></div>Cargando JSON...';
+      results.style.display = 'none';
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (!data.trades || !Array.isArray(data.trades)) {
+            showError('JSON inválido. Usá convert_report.py para generarlo.'); return;
+          }
+          loading.innerHTML = '<div class="spinner"></div>Procesando ' + data.trades.length.toLocaleString() + ' trades...';
+          setTimeout(() => {
+            parseAndRender(
+              [{}], // dummy raw (legacy compat - we pass trades directly below)
+              '__json__',
+              data.accountName || '',
+              data.accountNum || '',
+              data.company || '',
+              data
+            );
+          }, 30);
+        } catch(err) {
+          showError('Error al leer el JSON: ' + err.message);
+        }
+      };
+      reader.readAsText(file, 'utf-8');
+    }
+
     function processFile(file) {
       errorBox.style.display = 'none';
       loading.style.display = 'block';
+      loading.innerHTML = '<div class="spinner"></div>Leyendo archivo' + (file.size > 5e6 ? ' grande — puede demorar unos segundos...' : '...');
       results.style.display = 'none';
 
       const reader = new FileReader();
       reader.onload = e => {
-        try {
-          const wb = XLSX.read(e.target.result, { type: 'array' });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-          parseAndRender(raw);
-        } catch (err) {
-          showError('No se pudo leer el archivo. Asegurate de exportar el reporte desde MT4/MT5 en formato .xlsx');
-        }
+        setTimeout(() => {
+          try {
+            const wb = XLSX.read(e.target.result, {
+              type: 'array',
+              cellDates: false,
+              cellNF: false,
+              cellStyles: false,
+              sheetStubs: false,
+              raw: true
+            });
+            if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) {
+              showError('El archivo no contiene hojas reconocibles.'); return;
+            }
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            if (!ws) {
+              showError('No se pudo acceder a la hoja del archivo.'); return;
+            }
+            loading.innerHTML = '<div class="spinner"></div>Detectando formato...';
+            setTimeout(() => {
+              try {
+                processWorksheet(ws);
+              } catch (err) {
+                showError('Error al procesar: ' + err.message);
+              }
+            }, 30);
+          } catch (err) {
+            showError('No se pudo leer el archivo: ' + (err.message || err));
+          }
+        }, 30);
       };
       reader.readAsArrayBuffer(file);
+    }
+
+    // Lee celdas directo del worksheet (sin convertir toda la hoja a array)
+    function cellVal(ws, r, c) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      return cell ? String(cell.v === null || cell.v === undefined ? '' : cell.v).trim() : '';
+    }
+    function cellNum(ws, r, c) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      return cell ? parseFloat(cell.v) : NaN;
+    }
+
+    function processWorksheet(ws) {
+      const ref = ws['!ref'];
+      if (!ref) { showError('El archivo no tiene datos.'); return; }
+      const range = XLSX.utils.decode_range(ref);
+      const totalRows = range.e.r + 1;
+
+      // ── Metadata (first 20 rows) ─────────────────────────────────────
+      let accountName = '', accountNum = '', company = '';
+      for (let r = 0; r < Math.min(20, totalRows); r++) {
+        const f0 = cellVal(ws, r, 0);
+        if (f0 === 'Name:' || f0 === 'Nombre:')           accountName = cellVal(ws, r, 1) || cellVal(ws, r, 3);
+        if (f0 === 'Account:' || f0 === 'Cuenta de trading:') accountNum = cellVal(ws, r, 1) || cellVal(ws, r, 3);
+        if (f0 === 'Company:' || f0 === 'Empresa:')         company   = cellVal(ws, r, 1) || cellVal(ws, r, 3);
+      }
+
+      // ── Scan for section headers (cell-by-cell, no full array) ─────────
+      let dealsHeaderRow     = -1;
+      let positionsHeaderRow = -1;
+      let exnessHeaderRow    = -1;
+
+      for (let r = 0; r < totalRows; r++) {
+        const f0 = cellVal(ws, r, 0);
+        const f1 = cellVal(ws, r, 1);
+        const f2 = cellVal(ws, r, 2);
+        const f4 = cellVal(ws, r, 4);
+
+        // MT5 extended Deals: Time | Deal | Symbol | Type | Direction | ...
+        if ((f0 === 'Time' || f0 === 'Fecha/Hora') && f1 === 'Deal' &&
+            (f4 === 'Direction' || f4 === 'Dirección')) {
+          dealsHeaderRow = r; break;
+        }
+        // MT4/MT5 Positions: Time | Position | Symbol | Type | ...
+        if ((f0 === 'Time' || f0 === 'Fecha/Hora') &&
+            (f1 === 'Position' || f1 === 'Posición') && positionsHeaderRow === -1) {
+          positionsHeaderRow = r;
+        }
+        // Exness
+        if (f0 === 'Symbol' && (f2 === 'Time' || cellVal(ws, r, 3) === 'Type') && exnessHeaderRow === -1) {
+          exnessHeaderRow = r;
+        }
+      }
+
+      let headerRow = -1, format = 'mt4';
+      if (dealsHeaderRow !== -1)     { headerRow = dealsHeaderRow;     format = 'mt5deals'; }
+      else if (positionsHeaderRow !== -1) { headerRow = positionsHeaderRow; format = 'mt4'; }
+      else if (exnessHeaderRow !== -1)    { headerRow = exnessHeaderRow;    format = 'exness'; }
+
+      if (headerRow === -1) {
+        showError('Formato no reconocido. Exportá el reporte desde MT4/MT5 o Exness: Account History → Save as Report (.xlsx)');
+        return;
+      }
+
+      loading.innerHTML = '<div class="spinner"></div>Procesando ' + (totalRows - headerRow).toLocaleString() + ' registros...';
+
+      setTimeout(() => {
+        // ── Read only the relevant section via ranged sheet_to_json ──────
+        const sectionRange = { s: { r: headerRow, c: 0 }, e: { r: range.e.r, c: range.e.c } };
+        const raw = XLSX.utils.sheet_to_json(ws, {
+          header: 1,
+          defval: null,
+          range: sectionRange
+        });
+        parseAndRender(raw, format, accountName, accountNum, company);
+      }, 30);
     }
 
     function processHtmFile(file) {
@@ -1129,78 +1262,131 @@
       renderAll();
     }
 
-    function parseAndRender(raw) {
-      let accountName = '', accountNum = '', company = '';
-      let headerRow = -1;
-      let format = 'mt4'; // 'mt4' or 'exness'
-
-      for (let i = 0; i < Math.min(raw.length, 20); i++) {
-        const row = raw[i];
-        if (!row) continue;
-        const f0 = String(row[0] || '').trim();
-        const f2 = String(row[2] || '').trim();
-
-        if (f0 === 'Name:' || f0 === 'Nombre:') accountName = String(row[3] || '').trim();
-        if (f0 === 'Account:' || f0 === 'Cuenta de trading:') accountNum = String(row[3] || '').trim();
-        if (f0 === 'Company:' || f0 === 'Empresa:') company = String(row[3] || '').trim();
-
-        // Standard MT4/MT5: row[0]="Time", row[1]="Position"
-        if ((f0 === 'Time' || f0 === 'Fecha/Hora') && (String(row[1] || '').trim() === 'Position' || String(row[1] || '').trim() === 'Posición')) {
-          headerRow = i; format = 'mt4'; break;
-        }
-        // Exness: row[0]="Symbol", row[2]="Time", row[3]="Type"
-        if (f0 === 'Symbol' && f2 === 'Time') {
-          headerRow = i; format = 'exness'; break;
-        }
-        // Exness variant: row[0]="Symbol", row[1]="Position"
-        if (f0 === 'Symbol' && String(row[3] || '').trim() === 'Type') {
-          headerRow = i; format = 'exness'; break;
-        }
-      }
-
-      if (headerRow === -1) {
-        showError('Formato no reconocido. Exportá el reporte desde MT4/MT5 o Exness: Account History → Save as Report (.xlsx)');
+    function parseAndRender(raw, format, accountName, accountNum, company, jsonData) {
+      // __json__ fast path: pre-parsed data from convert_report.py
+      if (format === '__json__') {
+        const trades = jsonData.trades;
+        const initialBalance = jsonData.initialBalance || 0;
+        const byDate = {};
+        trades.forEach(t => { if (!byDate[t.date]) byDate[t.date] = []; byDate[t.date].push(t); });
+        const daily = {};
+        Object.keys(byDate).forEach(date => {
+          const ts = byDate[date];
+          const profits = ts.map(t => t.profit);
+          const nets = ts.map(t => t.net);
+          const winners = ts.filter(t => t.profit > 0);
+          const losers = ts.filter(t => t.profit < 0);
+          daily[date] = {
+            date, trades: ts.length,
+            net: nets.reduce((a,b) => a+b, 0),
+            grossProfit: winners.reduce((a,t) => a+t.profit, 0),
+            grossLoss: losers.reduce((a,t) => a+t.profit, 0),
+            wins: winners.length, losses: losers.length,
+            best: Math.max(...profits), worst: Math.min(...profits),
+            wr: winners.length / ts.length * 100,
+            totalLots: parseFloat(ts.reduce((a,t) => a+(t.vol||0), 0).toFixed(2)),
+          };
+        });
+        const sortedDates = Object.keys(daily).sort();
+        let running = initialBalance;
+        sortedDates.forEach(dk => {
+          daily[dk].pctChange = running !== 0 ? (daily[dk].net / running) * 100 : null;
+          running += daily[dk].net;
+          daily[dk].endBalance = running;
+        });
+        const buys = trades.filter(t => t.type === 'buy');
+        const sells = trades.filter(t => t.type === 'sell');
+        allData = {
+          daily, accountName, accountNum, company,
+          totalTrades: trades.length, initialBalance,
+          ratios: {
+            buys: buys.length, sells: sells.length,
+            wrBuy: buys.length > 0 ? buys.filter(t => t.net > 0).length / buys.length * 100 : 0,
+            wrSell: sells.length > 0 ? sells.filter(t => t.net > 0).length / sells.length * 100 : 0,
+          }
+        };
+        const dateKeys = Object.keys(daily).sort();
+        months = Array.from(new Set(dateKeys.map(d => d.slice(0, 7)))).sort();
+        monthIdx = months.length - 1;
+        loading.style.display = 'none';
+        dropZone.style.display = 'none';
+        results.style.display = 'block';
+        renderAll();
         return;
       }
 
-      const trades = [];
-      let initialBalance = 0;
-      let initialBalanceFound = false;
+      // raw[0] = header row, raw[1..] = data (sliced to section by processWorksheet)
+      // Legacy path (HTM / small files): detect inline when format is undefined
+      if (format === undefined) {
+        accountName = ''; accountNum = ''; company = ''; format = 'mt4';
+        let headerRow = -1;
+        for (let i = 0; i < Math.min(raw.length, 20); i++) {
+          const row = raw[i]; if (!row) continue;
+          const f0 = String(row[0] || '').trim();
+          if (f0 === 'Name:' || f0 === 'Nombre:')           accountName = String(row[1] || row[3] || '').trim();
+          if (f0 === 'Account:' || f0 === 'Cuenta de trading:') accountNum = String(row[1] || row[3] || '').trim();
+          if (f0 === 'Company:' || f0 === 'Empresa:')         company    = String(row[1] || row[3] || '').trim();
+        }
+        for (let i = 0; i < raw.length; i++) {
+          const row = raw[i]; if (!row) continue;
+          const f0 = String(row[0] || '').trim(), f1 = String(row[1] || '').trim();
+          const f2 = String(row[2] || '').trim(), f4 = String(row[4] || '').trim();
+          if ((f0 === 'Time' || f0 === 'Fecha/Hora') && f1 === 'Deal' && (f4 === 'Direction' || f4 === 'Direcci\u00f3n')) { format = 'mt5deals'; headerRow = i; break; }
+          if ((f0 === 'Time' || f0 === 'Fecha/Hora') && (f1 === 'Position' || f1 === 'Posici\u00f3n') && headerRow === -1) { format = 'mt4'; headerRow = i; }
+          if (f0 === 'Symbol' && (f2 === 'Time' || String(row[3] || '').trim() === 'Type') && headerRow === -1) { format = 'exness'; headerRow = i; }
+        }
+        if (headerRow === -1) { showError('Formato no reconocido.'); return; }
+        raw = raw.slice(headerRow); // raw[0]=header, raw[1..]=data
+      }
 
-      for (let i = headerRow + 1; i < raw.length; i++) {
+      const dataStart = 1; // raw[0] is the column header row
+      const trades = [];
+      let initialBalance = 0, initialBalanceFound = false;
+
+      for (let i = dataStart; i < raw.length; i++) {
         const row = raw[i];
         if (!row) continue;
 
         let type, dateStr, profit, vol, commission = 0, swap = 0;
 
         if (format === 'exness') {
-          // Exness: Symbol | Position | Time | Type | Volume | Price | S/L | T/P | Market Price | Swap | Profit
           if (!row[0] || !row[2]) continue;
           type = String(row[3] || '').trim().toLowerCase();
-          // Capturar balance inicial (deposit/balance row)
           if (!initialBalanceFound && (type === 'balance' || type === 'deposit' || type === 'credit')) {
             const bal = parseFloat(row[10]);
             if (!isNaN(bal) && bal > 0) { initialBalance = bal; initialBalanceFound = true; }
           }
           if (type !== 'buy' && type !== 'sell') continue;
-          vol = parseFloat(row[4]);
-          profit = parseFloat(row[10]);
-          swap = parseFloat(row[9]) || 0;
+          vol = parseFloat(row[4]); profit = parseFloat(row[10]); swap = parseFloat(row[9]) || 0;
           dateStr = String(row[2]).trim();
+        } else if (format === 'mt5deals') {
+          // Time | Deal | Symbol | Type | Direction | Volume | Price | Order | Commission | Fee | Swap | Profit | Balance
+          if (!row[0]) continue;
+          const sym = String(row[2] || '').trim().toLowerCase();
+          type = String(row[3] || '').trim().toLowerCase();
+          const direction = String(row[4] || '').trim().toLowerCase();
+          if (!initialBalanceFound && (sym === 'balance' || type === 'balance' || type === 'deposit' || type === 'credit')) {
+            const bal = parseFloat(row[6]); // price column = deposit amount
+            if (!isNaN(bal) && bal > 0) { initialBalance = bal; initialBalanceFound = true; }
+          }
+          if (direction !== 'out') continue;   // only closed trades
+          if (type !== 'buy' && type !== 'sell') continue;
+          vol        = parseFloat(row[5]);
+          profit     = parseFloat(row[11]);
+          commission = parseFloat(row[8])  || 0;
+          swap       = parseFloat(row[10]) || 0;
+          dateStr    = String(row[0]).trim();
         } else {
-          // Standard MT4/MT5: Time | Position | Symbol | Type | Volume | ... | Commission | Swap | Profit
+          // MT4/MT5 Positions: Time | Position | Symbol | Type | Volume | ... | Commission | Swap | Profit
           if (!row[0]) continue;
           type = String(row[3] || '').trim().toLowerCase();
-          // Capturar balance inicial (deposit/balance row)
           if (!initialBalanceFound && (type === 'balance' || type === 'deposit' || type === 'credit')) {
             const bal = parseFloat(row[12]);
             if (!isNaN(bal) && bal > 0) { initialBalance = bal; initialBalanceFound = true; }
           }
           if (type !== 'buy' && type !== 'sell') continue;
-          vol = parseFloat(row[4]);
-          profit = parseFloat(row[12]);
-          commission = parseFloat(row[10]) || 0;
-          swap = parseFloat(row[11]) || 0;
+          vol = parseFloat(row[4]); profit = parseFloat(row[12]);
+          commission = parseFloat(row[10]) || 0; swap = parseFloat(row[11]) || 0;
           dateStr = String(row[0]).trim();
         }
 
@@ -1214,7 +1400,7 @@
       }
 
       if (trades.length === 0) {
-        showError('No se encontraron trades en el archivo. Verificá que el reporte incluya historial de operaciones cerradas.');
+        showError('No se encontraron trades en el archivo. Verific\u00e1 que el reporte incluya historial de operaciones cerradas.');
         return;
       }
 
@@ -1247,7 +1433,7 @@
         };
       });
 
-      // Calcular porcentaje de cambio respecto al balance real del inicio del día
+      // % change with running balance
       const sortedDates = Object.keys(daily).sort();
       let runningBalance = initialBalance;
       sortedDates.forEach(dateKey => {
@@ -1282,6 +1468,7 @@
 
       renderAll();
     }
+
 
     let pnlLineChart = null;
 
