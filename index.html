@@ -115,15 +115,11 @@
     }
 
     #drop-zone #file-input {
-      position: absolute;
-      inset: 0;
-      opacity: 0;
-      cursor: pointer;
-      width: 100%;
-      height: 100%;
+      display: none;
     }
 
-    #drop-zone #htm-input {
+    #drop-zone #htm-input,
+    #drop-zone #csv-input {
       display: none;
     }
 
@@ -231,7 +227,7 @@
     /* METRICS */
     .metrics-grid {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(6, 1fr);
       gap: 14px;
       margin-bottom: 36px;
     }
@@ -352,7 +348,13 @@
       gap: 6px;
       flex-shrink: 0;
       width: 115px;
-      margin-top: 127px;
+      margin-top: 11px;
+    }
+
+    .monthly-ticker {
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      box-shadow: 0 0 15px rgba(127, 255, 178, 0.05);
     }
 
     .week-ticker {
@@ -868,7 +870,7 @@
   <main>
 
     <div id="drop-zone">
-      <input type="file" accept=".xlsx,.xls,.json" id="file-input">
+      <input type="file" accept=".xlsx,.xls,.json,.csv" id="file-input">
       <div class="drop-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
           stroke-linejoin="round">
@@ -879,8 +881,8 @@
         </svg>
       </div>
       <h2>Cargá tu reporte de trades</h2>
-      <p>Arrastrá el .xlsx o el .json generado con convert_report.py</p>
-      <span class="drop-hint">Trade History Report (.xlsx) · JSON convertido (.json)</span>
+      <p>Arrastrá el .xlsx, .json o .csv de MT5 Positions</p>
+      <span class="drop-hint">Trade History Report (.xlsx) · JSON convertido (.json) · MT5 Positions (.csv)</span>
       <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;align-items:center;">
         <button class="cent-toggle" id="cent-toggle-btn" onclick="toggleCent()">
           <span>¢ Cuenta Cent</span>
@@ -890,6 +892,13 @@
           <span class="cent-toggle" style="display:inline-flex;align-items:center;gap:8px;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
             Strategy Tester (.htm)
+          </span>
+        </label>
+        <label style="cursor:pointer;position:relative;z-index:10;" onclick="event.stopPropagation()">
+          <input type="file" accept=".csv" id="csv-input">
+          <span class="cent-toggle" style="display:inline-flex;align-items:center;gap:8px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+            Positions (.csv)
           </span>
         </label>
       </div>
@@ -950,6 +959,8 @@
     let currentYear, currentMonth;
     let months = [];
     let monthIdx = 0;
+    let years = [];
+    let yearIdx = 0;
     let currentView = 'monthly';
     let isCentAccount = false;
 
@@ -965,8 +976,14 @@
     dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
     dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) { if (f.name.endsWith('.htm') || f.name.endsWith('.html')) processHtmFile(f); else dispatchFile(f); } });
+    dropZone.addEventListener('click', e => {
+      if (!e.target.closest('label') && !e.target.closest('button')) {
+        fileInput.click();
+      }
+    });
     fileInput.addEventListener('change', e => { if (e.target.files[0]) dispatchFile(e.target.files[0]); });
     document.getElementById('htm-input').addEventListener('change', e => { if (e.target.files[0]) processHtmFile(e.target.files[0]); });
+    document.getElementById('csv-input').addEventListener('change', e => { if (e.target.files[0]) processCsvFile(e.target.files[0]); });
 
     function showError(msg) {
       errorBox.textContent = msg;
@@ -976,6 +993,7 @@
 
     function dispatchFile(file) {
       if (file.name.endsWith('.json')) processJsonFile(file);
+      else if (file.name.endsWith('.csv')) processCsvFile(file);
       else processFile(file);
     }
 
@@ -1087,7 +1105,7 @@
         const f4 = cellVal(ws, r, 4);
 
         // MT5 extended Deals: Time | Deal | Symbol | Type | Direction | ...
-        if ((f0 === 'Time' || f0 === 'Fecha/Hora') && f1 === 'Deal' &&
+        if ((f0 === 'Time' || f0 === 'Fecha/Hora') && (f1 === 'Deal' || f1 === 'Transacción') &&
             (f4 === 'Direction' || f4 === 'Dirección')) {
           dealsHeaderRow = r; break;
         }
@@ -1126,6 +1144,148 @@
       }, 30);
     }
 
+    function processCsvFile(file) {
+      errorBox.style.display = 'none';
+      loading.style.display = 'block';
+      results.style.display = 'none';
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          parseMT5CSV(e.target.result, file.name);
+        } catch (err) {
+          showError('No se pudo procesar el archivo CSV: ' + err.message);
+        }
+      };
+      reader.readAsText(file, 'utf-8');
+    }
+
+    function parseMT5CSV(csvText, fileName) {
+      const lines = csvText.split('\n');
+      const trades = [];
+      let initialBalance = 0;
+      let initialBalanceFound = false;
+
+      for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        const cols = lines[i].split(';');
+        if (cols.length < 11) continue;
+
+        const type = cols[1].trim().toLowerCase();
+
+        if (type === 'balance') {
+          const amountStr = cols[10].replace(/,/g, '.');
+          const amount = parseFloat(amountStr);
+          if (!isNaN(amount) && amount > 0 && !initialBalanceFound) {
+            initialBalance = amount;
+            initialBalanceFound = true;
+          }
+          continue;
+        }
+
+        if (type !== 'buy' && type !== 'sell') continue;
+
+        const closeTimeStr = cols[6].trim();
+        if (!closeTimeStr) continue;
+
+        const dateKey = closeTimeStr.split(' ')[0].replace(/\./g, '-');
+        const profit = parseFloat(cols[10].replace(/,/g, '.')) || 0;
+        const commission = parseFloat(cols[8].replace(/,/g, '.')) || 0;
+        const swap = parseFloat(cols[9].replace(/,/g, '.')) || 0;
+        const net = profit + commission + swap;
+        const vol = parseFloat(cols[2].replace(/,/g, '.')) || 0;
+
+        trades.push({ date: dateKey, fullDate: closeTimeStr, profit, net, commission, swap, type, vol });
+      }
+
+      if (trades.length === 0) {
+        showError('No se encontraron trades cerrados en el CSV.');
+        return;
+      }
+
+      trades.sort((a, b) => a.fullDate.localeCompare(b.fullDate));
+
+      const daily = {};
+      let runningBalance = initialBalance;
+
+      trades.forEach(t => {
+        if (!daily[t.date]) {
+          daily[t.date] = { date: t.date, trades: 0, wins: 0, net: 0, profit: 0, commission: 0, swap: 0, vol: 0, grossProfit: 0, grossLoss: 0, best: -Infinity, worst: Infinity, startBalance: runningBalance, endBalance: runningBalance, pctChange: 0, list: [] };
+        }
+        daily[t.date].trades++;
+        if (t.net > 0) daily[t.date].wins++;
+        daily[t.date].net += t.net;
+        daily[t.date].profit += t.profit;
+        daily[t.date].commission += t.commission;
+        daily[t.date].swap += t.swap;
+        daily[t.date].vol += t.vol;
+        if (t.net > 0) daily[t.date].grossProfit += t.net;
+        if (t.net < 0) daily[t.date].grossLoss += t.net;
+        if (t.net > daily[t.date].best) daily[t.date].best = t.net;
+        if (t.net < daily[t.date].worst) daily[t.date].worst = t.net;
+        daily[t.date].list.push(t);
+
+        runningBalance += t.net;
+        daily[t.date].endBalance = runningBalance;
+      });
+
+      // Finalise computed fields
+      Object.keys(daily).forEach(date => {
+        const d = daily[date];
+        d.wr = d.trades > 0 ? (d.wins / d.trades * 100) : 0;
+        d.totalLots = parseFloat(d.vol.toFixed(2));
+        if (d.best === -Infinity) d.best = 0;
+        if (d.worst === Infinity) d.worst = 0;
+      });
+
+      Object.keys(daily).sort().forEach(date => {
+        let st = daily[date].startBalance;
+        if (st > 0) {
+          daily[date].pctChange = (daily[date].net / st) * 100;
+        } else {
+          daily[date].pctChange = null;
+        }
+      });
+
+      const buys = trades.filter(t => t.type === 'buy');
+      const sells = trades.filter(t => t.type === 'sell');
+      const ratios = {
+        buys: buys.length,
+        sells: sells.length,
+        wrBuy: buys.length > 0 ? (buys.filter(t => t.net > 0).length / buys.length * 100) : 0,
+        wrSell: sells.length > 0 ? (sells.filter(t => t.net > 0).length / sells.length * 100) : 0
+      };
+
+      function calcDrawdown(tradesArray, initBal) {
+        let maxDDUSD = 0, maxDDPct = 0, peak = initBal, curr = initBal;
+        tradesArray.forEach(t => {
+          curr += t.net;
+          if (curr > peak) peak = curr;
+          let ddUSD = peak - curr;
+          if (ddUSD > maxDDUSD) maxDDUSD = ddUSD;
+          if (peak > 0) {
+            let ddPct = (ddUSD / peak) * 100;
+            if (ddPct > maxDDPct) maxDDPct = ddPct;
+          }
+        });
+        return { maxDDUSD, maxDDPct };
+      }
+
+      const { maxDDUSD, maxDDPct } = calcDrawdown(trades, initialBalance);
+      allData = { daily, accountName: fileName.replace('.csv', ''), accountNum: '', company: 'MT5 CSV', totalTrades: trades.length, ratios, initialBalance, maxDDUSD, maxDDPct };
+
+      const dateKeys = Object.keys(daily).sort();
+      const monthSet = new Set(dateKeys.map(d => d.slice(0, 7)));
+      months = Array.from(monthSet).sort();
+      monthIdx = months.length - 1;
+      years = Array.from(new Set(months.map(m => parseInt(m)))).sort();
+      yearIdx = years.length - 1;
+
+      loading.style.display = 'none';
+      dropZone.style.display = 'none';
+      results.style.display = 'block';
+      renderAll();
+    }
+
     function processHtmFile(file) {
       errorBox.style.display = 'none';
       loading.style.display = 'block';
@@ -1144,6 +1304,36 @@
     function parseStrategyTester(html, fileName) {
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
+
+      function calcDrawdown(tradesArray, initBal) {
+        let maxDDUSD = 0, maxDDPct = 0, peak = initBal, curr = initBal;
+        tradesArray.forEach(t => {
+          curr += t.net; // Ignoring t.balance to avoid drops caused by withdrawals
+          if (curr > peak) peak = curr;
+          let ddUSD = peak - curr;
+          if (ddUSD > maxDDUSD) maxDDUSD = ddUSD;
+          if (peak > 0) {
+            let ddPct = (ddUSD / peak) * 100;
+            if (ddPct > maxDDPct) maxDDPct = ddPct;
+          }
+        });
+        return { maxDDUSD, maxDDPct };
+      }
+
+      let reportMaxDD = null, reportMaxDDPct = null;
+      const allTds = Array.from(doc.querySelectorAll('td'));
+      for (let i = 0; i < allTds.length; i++) {
+        const text = (allTds[i].textContent || '').toLowerCase();
+        if (text.includes('reducción máxima de la equidad') || text.includes('maximal equity drawdown')) {
+          if (allTds[i+1]) {
+            const match = allTds[i+1].textContent.match(/([0-9\.]+)\s*\(\s*([0-9\.]+)%\s*\)/);
+            if (match) {
+              reportMaxDD = parseFloat(match[1]);
+              reportMaxDDPct = parseFloat(match[2]);
+            }
+          }
+        }
+      }
 
       // Server/account info from meta or divs
       const serverMeta = doc.querySelector('meta[name="server"]');
@@ -1226,6 +1416,7 @@
           worst: Math.min(...profits),
           wr: (winners.length / ts.length * 100),
           totalLots: parseFloat(ts.reduce((a, t) => a + (t.vol || 0), 0).toFixed(2)),
+          list: ts
         };
       });
 
@@ -1249,12 +1440,21 @@
         wrBuy: buys.length > 0 ? (buys.filter(t => t.net > 0).length / buys.length * 100) : 0,
         wrSell: sells.length > 0 ? (sells.filter(t => t.net > 0).length / sells.length * 100) : 0
       };
-      allData = { daily, accountName, accountNum: '', company, totalTrades: trades.length, ratios, initialBalance };
+      
+      let { maxDDUSD, maxDDPct } = calcDrawdown(trades, initialBalance);
+      if (reportMaxDD !== null) {
+        maxDDUSD = reportMaxDD;
+        maxDDPct = reportMaxDDPct !== null ? reportMaxDDPct : maxDDPct;
+      }
+      
+      allData = { daily, accountName, accountNum: '', company, totalTrades: trades.length, ratios, initialBalance, maxDDUSD, maxDDPct };
 
       const dateKeys = Object.keys(daily).sort();
       const monthSet = new Set(dateKeys.map(d => d.slice(0, 7)));
       months = Array.from(monthSet).sort();
       monthIdx = months.length - 1;
+      years = Array.from(new Set(months.map(m => parseInt(m)))).sort();
+      yearIdx = years.length - 1;
 
       loading.style.display = 'none';
       dropZone.style.display = 'none';
@@ -1263,6 +1463,21 @@
     }
 
     function parseAndRender(raw, format, accountName, accountNum, company, jsonData) {
+      function calcDrawdown(tradesArray, initBal) {
+        let maxDDUSD = 0, maxDDPct = 0, peak = initBal, curr = initBal;
+        tradesArray.forEach(t => {
+          curr += t.net; // Ignoring t.balance to avoid drops caused by withdrawals
+          if (curr > peak) peak = curr;
+          let ddUSD = peak - curr;
+          if (ddUSD > maxDDUSD) maxDDUSD = ddUSD;
+          if (peak > 0) {
+            let ddPct = (ddUSD / peak) * 100;
+            if (ddPct > maxDDPct) maxDDPct = ddPct;
+          }
+        });
+        return { maxDDUSD, maxDDPct };
+      }
+
       // __json__ fast path: pre-parsed data from convert_report.py
       if (format === '__json__') {
         const trades = jsonData.trades;
@@ -1285,6 +1500,7 @@
             best: Math.max(...profits), worst: Math.min(...profits),
             wr: winners.length / ts.length * 100,
             totalLots: parseFloat(ts.reduce((a,t) => a+(t.vol||0), 0).toFixed(2)),
+            list: ts
           };
         });
         const sortedDates = Object.keys(daily).sort();
@@ -1296,6 +1512,7 @@
         });
         const buys = trades.filter(t => t.type === 'buy');
         const sells = trades.filter(t => t.type === 'sell');
+        const { maxDDUSD, maxDDPct } = calcDrawdown(trades, initialBalance);
         allData = {
           daily, accountName, accountNum, company,
           totalTrades: trades.length, initialBalance,
@@ -1303,11 +1520,14 @@
             buys: buys.length, sells: sells.length,
             wrBuy: buys.length > 0 ? buys.filter(t => t.net > 0).length / buys.length * 100 : 0,
             wrSell: sells.length > 0 ? sells.filter(t => t.net > 0).length / sells.length * 100 : 0,
-          }
+          },
+          maxDDUSD, maxDDPct
         };
         const dateKeys = Object.keys(daily).sort();
         months = Array.from(new Set(dateKeys.map(d => d.slice(0, 7)))).sort();
         monthIdx = months.length - 1;
+        years = Array.from(new Set(months.map(m => parseInt(m)))).sort();
+        yearIdx = years.length - 1;
         loading.style.display = 'none';
         dropZone.style.display = 'none';
         results.style.display = 'block';
@@ -1331,7 +1551,7 @@
           const row = raw[i]; if (!row) continue;
           const f0 = String(row[0] || '').trim(), f1 = String(row[1] || '').trim();
           const f2 = String(row[2] || '').trim(), f4 = String(row[4] || '').trim();
-          if ((f0 === 'Time' || f0 === 'Fecha/Hora') && f1 === 'Deal' && (f4 === 'Direction' || f4 === 'Direcci\u00f3n')) { format = 'mt5deals'; headerRow = i; break; }
+          if ((f0 === 'Time' || f0 === 'Fecha/Hora') && (f1 === 'Deal' || f1 === 'Transacción' || f1 === 'Transacci\u00f3n') && (f4 === 'Direction' || f4 === 'Direcci\u00f3n')) { format = 'mt5deals'; headerRow = i; break; }
           if ((f0 === 'Time' || f0 === 'Fecha/Hora') && (f1 === 'Position' || f1 === 'Posici\u00f3n') && headerRow === -1) { format = 'mt4'; headerRow = i; }
           if (f0 === 'Symbol' && (f2 === 'Time' || String(row[3] || '').trim() === 'Type') && headerRow === -1) { format = 'exness'; headerRow = i; }
         }
@@ -1343,11 +1563,27 @@
       const trades = [];
       let initialBalance = 0, initialBalanceFound = false;
 
+      // Extract column indices dynamically
+      const headers = (raw[0] || []).map(h => String(h).trim().toLowerCase());
+      
+      let colSym=2, colType=3, colDir=4, colVol=5, colPrice=6, colComm=8, colSwap=10, colProfit=11, colBal=12;
+      
+      if (format === 'mt5deals') {
+          for(let i=0; i<headers.length; i++) {
+              let h = headers[i];
+              if(h.includes('profit') || h.includes('beneficio')) colProfit = i;
+              else if(h.includes('swap')) colSwap = i;
+              else if(h.includes('commission') || h.includes('comisión') || h.includes('comisi\u00f3n')) colComm = i;
+              else if(h.includes('volume') || h.includes('volumen')) colVol = i;
+              else if(h.includes('balance')) colBal = i;
+          }
+      }
+
       for (let i = dataStart; i < raw.length; i++) {
         const row = raw[i];
         if (!row) continue;
 
-        let type, dateStr, profit, vol, commission = 0, swap = 0;
+        let type, dateStr, profit, vol, commission = 0, swap = 0, balance = null;
 
         if (format === 'exness') {
           if (!row[0] || !row[2]) continue;
@@ -1366,15 +1602,23 @@
           type = String(row[3] || '').trim().toLowerCase();
           const direction = String(row[4] || '').trim().toLowerCase();
           if (!initialBalanceFound && (sym === 'balance' || type === 'balance' || type === 'deposit' || type === 'credit')) {
-            const bal = parseFloat(row[6]); // price column = deposit amount
+            let bal = parseFloat(row[6]); // price column = deposit amount
+            if (isNaN(bal) || bal <= 0) bal = parseFloat(row[colProfit]); // fallback to profit column
             if (!isNaN(bal) && bal > 0) { initialBalance = bal; initialBalanceFound = true; }
           }
           if (direction !== 'out') continue;   // only closed trades
           if (type !== 'buy' && type !== 'sell') continue;
-          vol        = parseFloat(row[5]);
-          profit     = parseFloat(row[11]);
-          commission = parseFloat(row[8])  || 0;
-          swap       = parseFloat(row[10]) || 0;
+          
+          // En MT5 Deals, el deal 'out' (cierre) tiene el tipo opuesto a la posición.
+          // Ej: Para cerrar un LONG (buy), se emite un deal 'sell'.
+          type = type === 'buy' ? 'sell' : 'buy';
+          
+          vol        = parseFloat(row[colVol]);
+          profit     = parseFloat(row[colProfit]);
+          commission = parseFloat(row[colComm])  || 0;
+          swap       = parseFloat(row[colSwap]) || 0;
+          balance    = parseFloat(row[colBal]);
+          if (isNaN(balance)) balance = null;
           dateStr    = String(row[0]).trim();
         } else {
           // MT4/MT5 Positions: Time | Position | Symbol | Type | Volume | ... | Commission | Swap | Profit
@@ -1396,7 +1640,7 @@
         if (!dateParts) continue;
         const dateKey = `${dateParts[1]}-${dateParts[2]}-${dateParts[3]}`;
 
-        trades.push({ date: dateKey, profit, commission, swap, net: profit + commission + swap, type, vol });
+        trades.push({ date: dateKey, profit, commission, swap, net: profit + commission + swap, type, vol, balance });
       }
 
       if (trades.length === 0) {
@@ -1430,6 +1674,7 @@
           worst: Math.min(...profits),
           wr: (winners.length / ts.length * 100),
           totalLots: parseFloat(ts.reduce((a, t) => a + (t.vol || 0), 0).toFixed(2)),
+          list: ts
         };
       });
 
@@ -1454,13 +1699,23 @@
         wrSell: sells.length > 0 ? (sells.filter(t => t.net > 0).length / sells.length * 100) : 0
       };
 
-      allData = { daily, accountName, accountNum, company, totalTrades: trades.length, ratios, initialBalance };
+      let { maxDDUSD, maxDDPct } = calcDrawdown(trades, initialBalance);
+      if (jsonData && jsonData.reportMaxDD !== undefined && jsonData.reportMaxDD !== null) {
+        maxDDUSD = jsonData.reportMaxDD;
+        if (jsonData.reportMaxDDPct !== undefined && jsonData.reportMaxDDPct !== null) {
+          maxDDPct = jsonData.reportMaxDDPct;
+        }
+      }
+
+      allData = { daily, accountName, accountNum, company, totalTrades: trades.length, ratios, initialBalance, maxDDUSD, maxDDPct };
 
       // Build months list
       const dateKeys = Object.keys(daily).sort();
       const monthSet = new Set(dateKeys.map(d => d.slice(0, 7)));
       months = Array.from(monthSet).sort();
       monthIdx = months.length - 1;
+      years = Array.from(new Set(months.map(m => parseInt(m)))).sort();
+      yearIdx = years.length - 1;
 
       loading.style.display = 'none';
       dropZone.style.display = 'none';
@@ -1603,6 +1858,8 @@
       const wr = (totalWins / totalTrades * 100);
 
       const r = allData.ratios;
+      const ddUSD = allData.maxDDUSD || 0;
+      const ddPct = allData.maxDDPct || 0;
 
       document.getElementById('metrics-grid').innerHTML = `
     <div class="metric-card">
@@ -1624,6 +1881,10 @@
     <div class="metric-card" id="ratio-card" style="cursor:help;">
       <div class="m-label">Longs / Shorts</div>
       <div class="m-value">${r.buys} / ${r.sells}</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Max Drawdown</div>
+      <div class="m-value red">${fmtMoney(-ddUSD)} <span style="font-size:12px;color:var(--muted)">(${ddPct.toFixed(1)}%)</span></div>
     </div>
   `;
 
@@ -1729,6 +1990,52 @@
       sidebar.style.display = 'flex';
 
       const weeks = calcWeeklyPnl(year, month);
+      const monthlyTotal = weeks.reduce((sum, wk) => sum + wk.net, 0);
+
+      // Calculate max consecutive loss for the month
+      let allMonthTrades = [];
+      const daysInMonth = new Date(year, month, 0).getDate();
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const info = allData.daily[dateKey];
+        if (info && info.list) {
+          allMonthTrades = allMonthTrades.concat(info.list);
+        }
+      }
+
+      let maxLossMoney = 0;
+      let maxLossCount = 0;
+      let currentLossMoney = 0;
+      let currentLossCount = 0;
+
+      allMonthTrades.forEach(t => {
+        if (t.net < 0) {
+          currentLossMoney += t.net;
+          currentLossCount++;
+        } else {
+          if (currentLossMoney < maxLossMoney) {
+            maxLossMoney = currentLossMoney;
+            maxLossCount = currentLossCount;
+          }
+          currentLossMoney = 0;
+          currentLossCount = 0;
+        }
+      });
+      if (currentLossMoney < maxLossMoney) {
+        maxLossMoney = currentLossMoney;
+        maxLossCount = currentLossCount;
+      }
+
+      // Monthly Total Ticker
+      const monthTicker = document.createElement('div');
+      monthTicker.className = 'week-ticker monthly-ticker';
+      monthTicker.innerHTML = `
+        <div class="wt-label">Total Mes</div>
+        <div class="wt-value ${monthlyTotal >= 0 ? 'pos' : 'neg'}" style="font-size: 16px;">${fmtMoney(monthlyTotal)}</div>
+        <div class="wt-label" style="margin-top: 12px; color: var(--red); font-size: 9px; opacity: 0.8;">Pérdida Máx. Consec.</div>
+        <div class="wt-value neg" style="font-size: 13px; color: var(--red);">${maxLossCount} (${fmtMoney(maxLossMoney)})</div>
+      `;
+      sidebar.appendChild(monthTicker);
 
       weeks.forEach((wk, i) => {
         const hasData = wk.trades > 0;
@@ -1763,8 +2070,7 @@
     }
 
     function renderYearView() {
-      const ym = months[monthIdx];
-      const [year] = ym.split('-').map(Number);
+      const year = years[yearIdx];
 
       currentView = 'yearly';
       document.getElementById('month-title').textContent = `${year}`;
@@ -1838,8 +2144,16 @@
     }
 
     function changeMonth(dir) {
-      monthIdx = Math.max(0, Math.min(months.length - 1, monthIdx + dir));
-      renderCalendar();
+      if (currentView === 'yearly') {
+        const newYearIdx = yearIdx + dir;
+        if (newYearIdx >= 0 && newYearIdx < years.length) {
+          yearIdx = newYearIdx;
+          renderYearView();
+        }
+      } else {
+        monthIdx = Math.max(0, Math.min(months.length - 1, monthIdx + dir));
+        renderCalendar();
+      }
     }
 
     function renderBars() {
